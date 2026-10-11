@@ -1,0 +1,40 @@
+{
+  "name": "Glass",
+  "author": "Kite",
+  "description": "Translucent dark glass with a violet glow.",
+
+  "width": 700,
+  "cornerRadius": 16,
+  "background": "linear:#D92A2440,#E0121020",
+  "borderColor": "#40A78BFA",
+  "borderThickness": 1,
+  "accent": "#A78BFA",
+  "accentWidth": 0,
+  "shadow": true,
+  "shadowColor": "#5B21B6",
+  "shadowOpacity": 0.5,
+  "shadowBlur": 32,
+
+  "inputHeight": 64,
+  "paddingX": 22,
+  "inputFont": "Segoe UI Variable Display, Segoe UI",
+  "inputFontSize": 24,
+  "inputFontWeight": "Light",
+  "inputColor": "#F5F3FF",
+  "caretColor": "#A78BFA",
+  "placeholderColor": "#7C6FA8",
+
+  "chipBackground": "#7C3AED",
+
+  "separatorColor": "#30A78BFA",
+  "resultColor": "#EDE9FE",
+  "descriptionColor": "#8B80B5",
+  "selectedBackground": "#407C3AED",
+  "selectedColor": "#FFFFFF",
+  "selectedDescriptionColor": "#C4B5FD",
+  "selectionCornerRadius": 10,
+  "rowHeight": 50,
+  "iconSize": 32,
+  "glyphColor": "#C4B5FD",
+  "shortcutColor": "#5B5280"
+}

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>KiteSetup</AssemblyName>
+    <RootNamespace>Kite.Setup</RootNamespace>
+    <ApplicationIcon>..\Kite.App\Assets\kite.ico</ApplicationIcon>
+    <ApplicationManifest>..\Kite.App\app.manifest</ApplicationManifest>
+    <Description>Kite setup</Description>
+    <!-- The zipped Kite build to install; publish.ps1 creates it before building setup. -->
+    <PayloadZip Condition="'$(PayloadZip)' == ''">$(MSBuildThisFileDirectory)..\..\publish\payload\Kite.zip</PayloadZip>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Page Include="..\Kite.App\Settings\SettingsTheme.xaml" Link="SettingsTheme.xaml" />
+    <Resource Include="..\Kite.App\Assets\kite.ico" Link="kite.ico" />
+    <EmbeddedResource Include="$(PayloadZip)" LogicalName="Kite.payload.zip" Condition="Exists('$(PayloadZip)')" />
+  </ItemGroup>
+</Project>

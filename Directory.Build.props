@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Version>0.2.0</Version>
+    <Authors>mversion</Authors>
+    <Product>Kite</Product>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Keep release output to Kite.exe + skins (no loose .pdb files). -->
+    <DebugType Condition="'$(Configuration)' == 'Release'">embedded</DebugType>
+  </PropertyGroup>
+</Project>

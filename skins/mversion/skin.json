@@ -1,0 +1,47 @@
+{
+  // Recreation of the "mversion" Launchy skin: minimalist dark bar, pink edge, cyan input.
+  // Every key is optional - delete a line to fall back to the default. Saving this file
+  // updates the open launcher immediately.
+  "name": "mversion",
+  "author": "Bilgin Ozkan",
+  "description": "Minimalist dark skin.",
+
+  "width": 640,
+  "cornerRadius": 6,
+  "background": "linear:#2C2C2C,#1B1B1B",
+  "borderColor": "#14FFFFFF",
+  "borderThickness": 1,
+  "accent": "#C2185B",
+  "accentWidth": 5,
+  "shadow": true,
+  "shadowOpacity": 0.55,
+  "shadowBlur": 22,
+
+  "inputHeight": 58,
+  "paddingX": 18,
+  "inputFont": "Segoe UI",
+  "inputFontSize": 21,
+  "inputFontWeight": "SemiBold",
+  "inputColor": "#00C4FF",
+  "placeholderColor": "#505A60",
+  "placeholder": "launch…",
+
+  "chipBackground": "#C2185B",
+  "chipColor": "#FFFFFF",
+
+  "resultsBackground": "#141414",
+  "separatorColor": "#2A2A2A",
+  "resultFont": "Segoe UI",
+  "resultFontSize": 14,
+  "resultColor": "#D8D8D8",
+  "descriptionFontSize": 10.5,
+  "descriptionColor": "#6E6E6E",
+  "selectedBackground": "#33C2185B",
+  "selectedColor": "#FFFFFF",
+  "selectedDescriptionColor": "#B0B0B0",
+  "selectionCornerRadius": 4,
+  "rowHeight": 46,
+  "iconSize": 28,
+  "glyphColor": "#00C4FF",
+  "shortcutColor": "#4A4A4A"
+}

@@ -1,0 +1,40 @@
+{
+  "name": "Light",
+  "author": "Kite",
+  "description": "Clean light theme in the style of Windows 11.",
+
+  "width": 660,
+  "cornerRadius": 12,
+  "background": "#FAFAFA",
+  "borderColor": "#1A000000",
+  "borderThickness": 1,
+  "accent": "#0067C0",
+  "accentWidth": 0,
+  "shadow": true,
+  "shadowOpacity": 0.25,
+  "shadowBlur": 28,
+
+  "inputHeight": 60,
+  "paddingX": 20,
+  "inputFontSize": 22,
+  "inputColor": "#1A1A1A",
+  "caretColor": "#0067C0",
+  "placeholderColor": "#8A8A8A",
+  "placeholder": "Search apps, files, the web…",
+
+  "chipBackground": "#0067C0",
+  "chipColor": "#FFFFFF",
+
+  "resultsBackground": "Transparent",
+  "separatorColor": "#E5E5E5",
+  "resultColor": "#1A1A1A",
+  "descriptionColor": "#707070",
+  "selectedBackground": "#E8F1FB",
+  "selectedColor": "#003E73",
+  "selectedDescriptionColor": "#40607F",
+  "selectionCornerRadius": 8,
+  "rowHeight": 48,
+  "iconSize": 32,
+  "glyphColor": "#0067C0",
+  "shortcutColor": "#A0A0A0"
+}

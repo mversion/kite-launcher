@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>Kite</AssemblyName>
+    <RootNamespace>Kite.App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <TieredPGO>true</TieredPGO>
+    <!-- Kite sits idle in the tray: favour a small footprint over GC throughput. -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ApplicationIcon>Assets\kite.ico</ApplicationIcon>
+    <Description>Kite - a fast, skinnable keystroke launcher for Windows</Description>
+  </PropertyGroup>
+  <!-- Release publish: one Kite.exe (plus the skins folder), precompiled for fast startup. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <DebugType>embedded</DebugType>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Lets the GC hand freed memory back to Windows more eagerly (0 = default, 9 = most aggressive). -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\kite.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Kite.Core\Kite.Core.csproj" />
+    <ProjectReference Include="..\Kite.Plugins.Builtin\Kite.Plugins.Builtin.csproj" />
+    <ProjectReference Include="..\Kite.LaunchyImport\Kite.LaunchyImport.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\skins\**\*" LinkBase="skins" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
