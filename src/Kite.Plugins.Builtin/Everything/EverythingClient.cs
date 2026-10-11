@@ -5,7 +5,9 @@ using System.Text;
 
 namespace Kite.Plugins.Builtin.Everything;
 
-public sealed record EverythingResult(string Name, string Folder, bool IsFolder)
+/// <param name="Size">Bytes, or null when unknown (folders usually report none).</param>
+/// <param name="Modified">Local time the item was last modified, or null when unknown.</param>
+public sealed record EverythingResult(string Name, string Folder, bool IsFolder, long? Size = null, DateTime? Modified = null)
 {
     public string FullPath => Folder.Length == 0 ? Name : System.IO.Path.Combine(Folder, Name);
 }
@@ -89,7 +91,7 @@ public sealed class EverythingClient : IEverythingClient, IDisposable
     /// <summary>EVERYTHING_IPC_QUERY2 followed by the null-terminated UTF-16 search text.</summary>
     public static byte[] BuildQuery2(uint replyHwnd, uint replyId, string search, int maxResults, EverythingSort sort, bool matchPath)
     {
-        const uint RequestName = 0x1, RequestPath = 0x2;
+        const uint RequestName = 0x1, RequestPath = 0x2, RequestSize = 0x10, RequestDateModified = 0x40;
         const uint SearchMatchPath = 0x4;
         var text = Encoding.Unicode.GetBytes(search + "\0");
         var bytes = new byte[7 * 4 + text.Length];
@@ -99,7 +101,7 @@ public sealed class EverythingClient : IEverythingClient, IDisposable
         header[2] = matchPath ? SearchMatchPath : 0; // search_flags
         header[3] = 0;                              // offset
         header[4] = (uint)Math.Max(1, maxResults);  // max_results
-        header[5] = RequestName | RequestPath;      // request_flags
+        header[5] = RequestName | RequestPath | RequestSize | RequestDateModified; // request_flags
         header[6] = (uint)sort;                     // sort_type
         text.CopyTo(bytes, 28);
         return bytes;
@@ -107,8 +109,9 @@ public sealed class EverythingClient : IEverythingClient, IDisposable
 
     /// <summary>
     /// Parses EVERYTHING_IPC_LIST2: a header (totitems, numitems, offset, request_flags, sort_type),
-    /// numitems × {flags, data_offset}, then per item the requested fields in flag order; each
-    /// string is a DWORD length followed by that many UTF-16 chars and a terminating null.
+    /// numitems × {flags, data_offset}, then per item the requested fields in flag-bit order: each
+    /// string is a DWORD length followed by that many UTF-16 chars and a terminating null; size is a
+    /// 64-bit integer and dates are 64-bit FILETIMEs.
     /// </summary>
     public static IReadOnlyList<EverythingResult> ParseList2(ReadOnlySpan<byte> data)
     {
@@ -123,14 +126,38 @@ public sealed class EverythingClient : IEverythingClient, IDisposable
             var flags = Read(data, itemOffset);
             var p = (int)Read(data, itemOffset + 4);
             string name = "", folder = "";
+            long? size = null;
+            DateTime? modified = null;
             if ((requestFlags & 0x1) != 0) name = ReadString(data, ref p);
             if ((requestFlags & 0x2) != 0) folder = ReadString(data, ref p);
-            if (name.Length > 0) results.Add(new EverythingResult(name, folder, (flags & 0x1) != 0 || (flags & 0x2) != 0));
+            if ((requestFlags & 0x4) != 0) ReadString(data, ref p);  // full path (not requested, skipped if present)
+            if ((requestFlags & 0x8) != 0) ReadString(data, ref p);  // extension
+            if ((requestFlags & 0x10) != 0) size = ReadInt64(data, ref p) is var s and >= 0 ? s : null;
+            if ((requestFlags & 0x20) != 0) ReadInt64(data, ref p);  // date created
+            if ((requestFlags & 0x40) != 0) modified = FromFileTime(ReadInt64(data, ref p));
+            var isFolder = (flags & 0x1) != 0 || (flags & 0x2) != 0;
+            if (name.Length > 0) results.Add(new EverythingResult(name, folder, isFolder, isFolder ? null : size, modified));
         }
         return results;
     }
 
     private static uint Read(ReadOnlySpan<byte> data, int offset) => BitConverter.ToUInt32(data.Slice(offset, 4));
+
+    private static long ReadInt64(ReadOnlySpan<byte> data, ref int p)
+    {
+        if (p < 0 || p + 8 > data.Length) return -1;
+        var v = BitConverter.ToInt64(data.Slice(p, 8));
+        p += 8;
+        return v;
+    }
+
+    /// <summary>FILETIME (100 ns ticks since 1601, UTC) → local time; 0/-1 mean "unknown".</summary>
+    private static DateTime? FromFileTime(long fileTime)
+    {
+        if (fileTime <= 0 || fileTime == long.MaxValue) return null;
+        try { return DateTime.FromFileTimeUtc(fileTime).ToLocalTime(); }
+        catch (ArgumentOutOfRangeException) { return null; }
+    }
 
     private static string ReadString(ReadOnlySpan<byte> data, ref int p)
     {

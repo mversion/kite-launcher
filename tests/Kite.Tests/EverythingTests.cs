@@ -16,7 +16,7 @@ public class EverythingIpcTests
         Assert.Equal(4u, U(2));   // match path
         Assert.Equal(0u, U(3));   // offset
         Assert.Equal(25u, U(4));  // max results
-        Assert.Equal(3u, U(5));   // name | path
+        Assert.Equal(0x53u, U(5)); // name | path | size | date modified
         Assert.Equal(14u, U(6));  // date modified descending
         Assert.Equal("invoice\0", Encoding.Unicode.GetString(bytes, 28, bytes.Length - 28));
     }
@@ -45,6 +45,39 @@ public class EverythingIpcTests
         Assert.False(results[0].IsFolder);
         Assert.Equal(@"D:\Archive\Invoices", results[1].FullPath);
         Assert.True(results[1].IsFolder);
+    }
+
+    [Fact]
+    public void Parses_size_and_date_modified()
+    {
+        var modified = new DateTime(2026, 10, 3, 14, 32, 0, DateTimeKind.Utc);
+        var data = new List<byte>();
+        void U32(uint v) => data.AddRange(BitConverter.GetBytes(v));
+        void I64(long v) => data.AddRange(BitConverter.GetBytes(v));
+        void Str(string s) { U32((uint)s.Length); data.AddRange(Encoding.Unicode.GetBytes(s + "\0")); }
+
+        U32(1); U32(1); U32(0); U32(0x53); U32(14);    // name | path | size | date modified
+        U32(0); U32(28);                                // item 0 data starts right after the table
+        Str("report.docx"); Str(@"C:\Work"); I64(123_456); I64(modified.ToFileTimeUtc());
+
+        var r = Assert.Single(EverythingClient.ParseList2(data.ToArray()));
+        Assert.Equal(@"C:\Work\report.docx", r.FullPath);
+        Assert.Equal(123_456, r.Size);
+        Assert.Equal(modified.ToLocalTime(), r.Modified);
+    }
+
+    [Fact]
+    public void Formats_timestamps_compactly()
+    {
+        var now = new DateTime(2026, 10, 11, 18, 0, 0);
+        string? D(DateTime? m, long? size = null) => EverythingPlugin.FormatDetail(m, size, now);
+        var t = new DateTime(2026, 10, 11, 14, 32, 0).ToString("t");
+        Assert.Equal($"Today {t}", D(new DateTime(2026, 10, 11, 14, 32, 0)));
+        Assert.StartsWith("Yesterday ", D(new DateTime(2026, 10, 10, 9, 10, 0)));
+        Assert.Contains("2024", D(new DateTime(2024, 10, 3, 9, 0, 0)));
+        Assert.Equal($"Today {t}  ·  1.2 MB", D(new DateTime(2026, 10, 11, 14, 32, 0), 1_258_291));
+        Assert.Equal("512 B", D(null, 512));
+        Assert.Null(D(null));
     }
 
     [Fact]

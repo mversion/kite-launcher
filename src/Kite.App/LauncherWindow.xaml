@@ -77,13 +77,21 @@
                                Foreground="{DynamicResource Kite.Results.DescForeground}" />
                 </StackPanel>
 
-                <TextBlock Grid.Column="2" Text="{Binding Shortcut}" VerticalAlignment="Center" Margin="12,0,2,0"
-                           FontFamily="{DynamicResource Kite.Results.FontFamily}" FontSize="10.5"
-                           Foreground="{DynamicResource Kite.Shortcut.Foreground}" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,2,0">
+                    <!-- Optional extra from the plugin, e.g. an Everything result's date modified and size -->
+                    <TextBlock x:Name="Detail" Text="{Binding Detail}" VerticalAlignment="Center" Margin="0,0,14,0"
+                               FontFamily="{DynamicResource Kite.Results.FontFamily}"
+                               FontSize="{DynamicResource Kite.Results.DescFontSize}"
+                               Foreground="{DynamicResource Kite.Results.DescForeground}" />
+                    <TextBlock Text="{Binding Shortcut}" VerticalAlignment="Center"
+                               FontFamily="{DynamicResource Kite.Results.FontFamily}" FontSize="10.5"
+                               Foreground="{DynamicResource Kite.Shortcut.Foreground}" />
+                </StackPanel>
             </Grid>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                     <Setter TargetName="Desc" Property="Foreground" Value="{DynamicResource Kite.Results.SelectedDescForeground}" />
+                    <Setter TargetName="Detail" Property="Foreground" Value="{DynamicResource Kite.Results.SelectedDescForeground}" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>

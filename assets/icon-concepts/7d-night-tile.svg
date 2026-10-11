@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512">
+  <defs>
+    <linearGradient id="wing" x1="14" y1="44" x2="92" y2="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFA24A"/><stop offset="1" stop-color="#FA3A1E"/></linearGradient>
+    <linearGradient id="body" x1="92" y1="10" x2="56" y2="88" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FF3D8B"/><stop offset="1" stop-color="#E0186A"/></linearGradient>
+    <linearGradient id="trail" x1="40" y1="76" x2="8" y2="70" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5B14C8"/><stop offset="1" stop-color="#F9296B"/></linearGradient>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="100" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#2B1150"/><stop offset="1" stop-color="#12071F"/></linearGradient>
+  </defs>  <rect x="2" y="2" width="96" height="96" rx="22" fill="url(#tile)"/>
+  <g transform="translate(11 11) scale(0.78)"><path d="M38 77 C 27 90, 9 87, 10 73 C 11 63, 24 62, 26 71" fill="none" stroke="url(#trail)" stroke-width="7.5" stroke-linecap="round"/>
+  <path d="M14 44 L92 10 L42 56 Z" fill="url(#wing)"/>
+  <path d="M92 10 L64 88 L50 60 Z" fill="url(#body)"/>
+  <path d="M42 56 L50 60 L38 78 Z" fill="#450BA2"/></g>
+</svg>

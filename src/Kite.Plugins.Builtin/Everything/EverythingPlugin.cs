@@ -124,6 +124,7 @@ public sealed class EverythingPlugin : IKitePlugin
                 Name = r.Name,
                 Target = r.FullPath,
                 Description = r.IsFolder ? $"Folder · {r.Folder}" : r.Folder,
+                Detail = FormatDetail(r.Modified, r.Size, DateTime.Now),
                 IconPath = r.FullPath,
                 Data = ResultTag,
                 // Positive scores list above the "open in Everything" row; negative below it.
@@ -180,6 +181,42 @@ public sealed class EverythingPlugin : IKitePlugin
         }
         return true;
     }
+
+    /// <summary>"Today 14:32 · 1.2 MB", "Yesterday 09:10", "Mon 16:05", "3 Oct 14:32", "3 Oct 2024".</summary>
+    public static string? FormatDetail(DateTime? modified, long? size, DateTime now)
+    {
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        string? when = null;
+        if (modified is { } m)
+        {
+            var time = m.ToString("t", culture);
+            var days = (now.Date - m.Date).Days;
+            when = days switch
+            {
+                0 => $"Today {time}",
+                1 => $"Yesterday {time}",
+                > 1 and < 7 => $"{m.ToString("ddd", culture)} {time}",
+                _ when m.Year == now.Year => $"{m.ToString("d MMM", culture)} {time}",
+                _ => m.ToString("d MMM yyyy", culture),
+            };
+        }
+        var bytes = size is { } s ? FormatSize(s) : null;
+        return (when, bytes) switch
+        {
+            (null, null) => null,
+            (null, _) => bytes,
+            (_, null) => when,
+            _ => $"{when}  ·  {bytes}",
+        };
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):0.#} MB",
+        _ => $"{bytes / (1024.0 * 1024 * 1024):0.##} GB",
+    };
 
     /// <summary>Prefer the user's own Everything shortcut (the owner chip) so portable installs work too.</summary>
     private string? OwnerExecutable(Query query) =>

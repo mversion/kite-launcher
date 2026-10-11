@@ -70,7 +70,13 @@ public sealed class SetupWindow : Window
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 22) };
         var logo = new Image { Width = 44, Height = 44, Margin = new Thickness(0, 0, 14, 0) };
-        try { logo.Source = BitmapFrame.Create(new Uri("pack://application:,,,/kite.ico")); } catch { }
+        try
+        {
+            // Use a large frame of the .ico (it holds 16-256 px) so the header logo is sharp.
+            var decoder = BitmapDecoder.Create(new Uri("pack://application:,,,/kite.ico"), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+            logo.Source = decoder.Frames.OrderBy(f => f.PixelWidth).FirstOrDefault(f => f.PixelWidth >= 88) ?? decoder.Frames.MaxBy(f => f.PixelWidth);
+        }
+        catch { /* the header just shows no logo */ }
         panel.Children.Add(logo);
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var title = new StackPanel { Orientation = Orientation.Horizontal };

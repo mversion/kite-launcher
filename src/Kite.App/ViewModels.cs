@@ -19,6 +19,7 @@ public sealed class ResultRow : INotifyPropertyChanged
     public CatItem Item { get; }
     public string Name => Item.Name;
     public string Description => Item.Description ?? Item.Target;
+    public string Detail => Item.Detail ?? "";
     public string Shortcut { get; }
     public string Glyph { get; }
 

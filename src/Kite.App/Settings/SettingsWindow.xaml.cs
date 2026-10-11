@@ -10,6 +10,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Kite.App.Services;
 using Kite.App.Skins;
 using Kite.Core.Catalog;
 using Kite.Core.Settings;
@@ -77,6 +78,7 @@ public partial class SettingsWindow : Window
         _host = host;
         InitializeComponent();
         VersionText.Text = "v" + (typeof(SettingsWindow).Assembly.GetName().Version?.ToString(3) ?? "0.1");
+        Logo.Source = AppIcon.Frame(52);
 
         _applyTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(350), DispatcherPriority.Normal, (_, _) => Flush(), Dispatcher);
         _applyTimer.Stop();

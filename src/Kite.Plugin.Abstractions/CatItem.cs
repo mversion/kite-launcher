@@ -18,6 +18,9 @@ public sealed record CatItem
     /// <summary>Secondary line (usually the path). Falls back to <see cref="Target"/>.</summary>
     public string? Description { get; init; }
 
+    /// <summary>Short right-aligned extra (e.g. a file's date modified and size). Optional.</summary>
+    public string? Detail { get; init; }
+
     /// <summary>Optional icon source: a file path whose icon is used, or a .png/.ico file.</summary>
     public string? IconPath { get; init; }
 
