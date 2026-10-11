@@ -404,6 +404,34 @@ public partial class SettingsWindow : Window
             Toggle(calc["copyToClipboard"]?.GetValue<bool>() ?? true, v => calc["copyToClipboard"] = v, Apply.Plugins));
         Add(s, "Calculator: comma as decimal point", "Type 1,5 instead of 1.5 (function arguments are then separated with ;).", "calcy calculator comma decimal european locale",
             Toggle(calc["commaDecimal"]?.GetValue<bool>() ?? false, v => calc["commaDecimal"] = v, Apply.Plugins));
+
+        // Everything (voidtools) inline file search
+        var ev = PluginSection(Kite.Plugins.Builtin.Everything.EverythingPlugin.PluginId);
+        var evOptions = Kite.Plugins.Builtin.Everything.EverythingPlugin.ReadOptions(ev);
+        Add(s, "Everything: how it works", "Type your Everything shortcut (e.g. \"e\"), press Tab, then search - matching files appear as you type. Enter opens a file, Shift+Enter opens Everything with the search, Ctrl+Enter shows the file in Explorer. Needs Everything running.",
+            "everything voidtools file search find files folders inline instant e tab", null);
+        Add(s, "Everything: search prefix", "Type this in front of a search to use Everything without Tab, e.g. ?invoice. Leave empty to turn it off.",
+            "everything prefix question mark quick search", SmallInput(evOptions.Prefix, v => ev["prefix"] = v, "?"));
+        Add(s, "Everything: results", "How many files to list.", "everything results count number max",
+            Number(evOptions.MaxResults, 1, 500, v => ev["maxResults"] = v, Apply.Plugins));
+        Add(s, "Everything: sort by", "Order of the file results.", "everything sort order name date modified run count path size",
+            Combo([("Name", Kite.Plugins.Builtin.Everything.EverythingSort.NameAscending),
+                   ("Date modified (newest first)", Kite.Plugins.Builtin.Everything.EverythingSort.DateModifiedDescending),
+                   ("Most run in Everything", Kite.Plugins.Builtin.Everything.EverythingSort.RunCountDescending),
+                   ("Path", Kite.Plugins.Builtin.Everything.EverythingSort.PathAscending),
+                   ("Size (largest first)", Kite.Plugins.Builtin.Everything.EverythingSort.SizeDescending)],
+                  evOptions.Sort, v => ev["sort"] = v.ToString(), Apply.Plugins));
+        Add(s, "Everything: match folder names too", "Search the full path, not just file names (Everything's \"Match Path\").", "everything match path folders full path",
+            Toggle(evOptions.MatchPath, v => ev["matchPath"] = v, Apply.Plugins));
+        Add(s, "Everything: Enter opens the Everything window", "Off: Enter opens the highlighted file. On: Enter opens Everything with your search (like Launchy) and the files are listed below it.",
+            "everything enter behaviour window launchy open", Toggle(evOptions.EnterOpensEverything, v => ev["enterOpensEverything"] = v, Apply.Plugins));
+    }
+
+    private TextBox SmallInput(string value, Action<string> set, string hint)
+    {
+        var box = Input(value, v => { set(v); Schedule(Apply.Plugins); }, hint);
+        box.Width = 90;
+        return box;
     }
 
     private JsonObject PluginSection(string id)

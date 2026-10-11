@@ -317,6 +317,7 @@ public partial class LauncherWindow : Window
 
     private void Input_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
     {
+        _userPickedRow = false;
         if (Input.Text.Contains('\t'))
         {
             SplitPastedSegments();
@@ -334,6 +335,9 @@ public partial class LauncherWindow : Window
 
     private void UpdatePlaceholder() =>
         Placeholder.Visibility = Input.Text.Length == 0 && _chips.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Set when the user moves the highlight; cleared whenever the query text changes.</summary>
+    private bool _userPickedRow;
 
     private async void RunSearch()
     {
@@ -382,8 +386,9 @@ public partial class LauncherWindow : Window
             LoadIcon(row);
         }
 
-        // Keep the highlight on the same item when results merely re-order (e.g. plugin rows arriving).
-        var keep = previous is null ? -1 : _rows.ToList().FindIndex(r => r.Item.Key == previous);
+        // Results that arrive later (plugins, Everything) re-order the list: the highlight follows the
+        // top result, unless the user picked a row with the arrow keys - then it stays on that row.
+        var keep = previous is null || !_userPickedRow ? -1 : _rows.ToList().FindIndex(r => r.Item.Key == previous);
         Results.SelectedIndex = _rows.Count == 0 ? -1 : Math.Max(0, keep);
         if (Results.SelectedItem is not null) Results.ScrollIntoView(Results.SelectedItem);
         UpdateTopIcon();
@@ -494,6 +499,7 @@ public partial class LauncherWindow : Window
 
     private void MoveSelection(int delta)
     {
+        _userPickedRow = true;
         if (_rows.Count == 0) return;
         _resultsAllowed = true;
         var i = Results.SelectedIndex + delta;
@@ -570,6 +576,7 @@ public partial class LauncherWindow : Window
 
     private void SetInput(string text)
     {
+        _userPickedRow = false;
         Input.Text = text;
         Input.CaretIndex = text.Length;
         UpdatePlaceholder();

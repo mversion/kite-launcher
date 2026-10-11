@@ -35,6 +35,13 @@ public interface IKitePlugin
     /// <summary>Launch an item owned by this plugin. Return false if not handled.</summary>
     bool Launch(CatItem item, Query query, LaunchMode mode);
 
+    /// <summary>
+    /// Lets a plugin take over a plain catalog item used as a Tab owner - e.g. the Everything
+    /// plugin handles "Everything.lnk ⇥ text". The plugin then supplies results for the query and
+    /// launches the owner row itself.
+    /// </summary>
+    bool HandlesOwner(CatItem owner) => false;
+
     void OnShow() { }
     void OnHide() { }
 }

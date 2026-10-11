@@ -28,15 +28,12 @@ public sealed class LaunchService
         if (query.Owner is { } owner)
         {
             var isOwnerRow = string.Equals(selected.Key, owner.Key, StringComparison.OrdinalIgnoreCase);
-            if (selected.PluginId is not null)
-            {
-                if (!_plugins.Launch(selected, query, mode) && isOwnerRow)
-                    ShellLauncher.Launch(owner.Target, query.ArgumentText, mode);
-            }
-            else
-            {
-                ShellLauncher.Launch(selected.Target, isOwnerRow ? query.ArgumentText : null, mode);
-            }
+            // A plugin that took over a plain owner (e.g. "Everything.lnk ⇥ invoice") launches it its own way.
+            var handled = isOwnerRow && _plugins.OwnerHandler(owner) is { } handler && handler.Launch(selected, query, mode);
+            if (!handled && selected.PluginId is not null)
+                handled = _plugins.Launch(selected, query, mode);
+            if (!handled)
+                ShellLauncher.Launch(isOwnerRow ? owner.Target : selected.Target, isOwnerRow ? query.ArgumentText : null, mode);
             Learn(ownerTypedText ?? "", owner);
             return;
         }

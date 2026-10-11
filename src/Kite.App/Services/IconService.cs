@@ -26,7 +26,16 @@ public sealed class IconService : IDisposable
         _worker.Start();
     }
 
-    public Task<ImageSource?> GetAsync(string path) =>
+    /// <summary>File search results can bring thousands of distinct paths; keep the cache bounded.</summary>
+    private const int MaxCachedIcons = 2000;
+
+    public Task<ImageSource?> GetAsync(string path)
+    {
+        if (_cache.Count > MaxCachedIcons) _cache.Clear();
+        return GetOrLoad(path);
+    }
+
+    private Task<ImageSource?> GetOrLoad(string path) =>
         _cache.GetOrAdd(path, p =>
         {
             var tcs = new TaskCompletionSource<ImageSource?>(TaskCreationOptions.RunContinuationsAsynchronously);

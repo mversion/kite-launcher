@@ -96,10 +96,16 @@ public sealed class PluginHost
 
     public async Task<IReadOnlyList<CatItem>> QueryAsync(Query query, CancellationToken ct)
     {
-        var targets = query.Owner?.PluginId is { } ownerId
-            ? Enabled.Where(p => string.Equals(p.Id, ownerId, StringComparison.OrdinalIgnoreCase)).ToList()
-            : Enabled.ToList();
-        if (query.Owner is not null && query.Owner.PluginId is null) return [];
+        List<IKitePlugin> targets;
+        if (query.Owner is null) targets = Enabled.ToList();
+        else if (query.Owner.PluginId is { } ownerId)
+        {
+            // The owning plugin, plus any plugin that adds results for it (e.g. Everything for a Runner command running Everything.exe).
+            var owner = query.Owner;
+            targets = Enabled.Where(p => string.Equals(p.Id, ownerId, StringComparison.OrdinalIgnoreCase) || SafeHandlesOwner(p, owner)).ToList();
+        }
+        else targets = OwnerHandler(query.Owner) is { } handler ? [handler] : [];
+        if (targets.Count == 0) return [];
 
         var tasks = targets.Select(async p =>
         {
@@ -118,6 +124,20 @@ public sealed class PluginHost
         var all = await Task.WhenAll(tasks).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
         return all.SelectMany(r => r).ToList();
+    }
+
+    /// <summary>The plugin that takes over a plain catalog item used as a Tab owner, if any.</summary>
+    public IKitePlugin? OwnerHandler(CatItem owner) =>
+        owner.PluginId is null ? Enabled.FirstOrDefault(p => SafeHandlesOwner(p, owner)) : null;
+
+    private bool SafeHandlesOwner(IKitePlugin plugin, CatItem owner)
+    {
+        try { return plugin.HandlesOwner(owner); }
+        catch (Exception ex)
+        {
+            _host.Log($"Plugin {plugin.Id} HandlesOwner failed: {ex.Message}");
+            return false;
+        }
     }
 
     public bool Launch(CatItem item, Query query, LaunchMode mode)
