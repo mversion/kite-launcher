@@ -3,9 +3,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <Version>0.2.0</Version>
-    <Authors>mversion</Authors>
-    <Product>Kite</Product>
+    <Version>0.3.0</Version>
+    <Product>Kite Launcher</Product>
+    <Authors>Bilgin Ozkan</Authors>
+    <Company>Bilgin Ozkan</Company>
+    <Copyright>© 2026 Bilgin Ozkan</Copyright>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- Keep release output to Kite.exe + skins (no loose .pdb files). -->
     <DebugType Condition="'$(Configuration)' == 'Release'">embedded</DebugType>

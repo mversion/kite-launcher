@@ -6,7 +6,7 @@ namespace Kite.App;
 public sealed class KiteCommandsPlugin(IReadOnlyDictionary<string, (string Description, Action Run)> commands) : IKitePlugin
 {
     public string Id => "kite";
-    public string Name => "Kite";
+    public string Name => "Kite Launcher";
     public string Description => "Kite's own commands";
 
     public void Init(IPluginContext context) { }

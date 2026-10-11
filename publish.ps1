@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-  Builds a Kite release into .\publish:
+  Builds a Kite Launcher release into .\publish:
     Kite\                       the app (Kite.exe + skins)
-    KiteSetup-<version>.exe     installer (choose "Install on this PC" or "Portable")
-    Kite-<version>-portable.zip unzip anywhere and run (keeps settings next to Kite.exe)
+    KiteLauncherSetup-<version>.exe     installer (choose "Install on this PC" or "Portable")
+    KiteLauncher-<version>-portable.zip unzip anywhere and run (keeps settings next to Kite.exe)
 
 .PARAMETER SelfContained
   Bundle the .NET runtime into Kite.exe so it runs on PCs without .NET 8 (much larger).
@@ -36,12 +36,12 @@ $setupOut = Join-Path $publish 'setup-build'
 if (Test-Path $setupOut) { Remove-Item $setupOut -Recurse -Force }
 dotnet publish (Join-Path $root 'src\Kite.Setup') -c Release -o $setupOut --nologo "-p:PayloadZip=$payload"
 if ($LASTEXITCODE -ne 0) { throw 'Publishing the installer failed.' }
-$setup = Join-Path $publish "KiteSetup-$version.exe"
+$setup = Join-Path $publish "KiteLauncherSetup-$version.exe"
 Copy-Item (Join-Path $setupOut 'KiteSetup.exe') $setup -Force
 Remove-Item $setupOut -Recurse -Force
 
 # 4. Portable zip (with the marker that keeps settings beside the exe)
-$portableZip = Join-Path $publish "Kite-$version-portable.zip"
+$portableZip = Join-Path $publish "KiteLauncher-$version-portable.zip"
 $staging = Join-Path $publish 'portable-staging\Kite'
 if (Test-Path (Split-Path $staging)) { Remove-Item (Split-Path $staging) -Recurse -Force }
 New-Item -ItemType Directory -Force $staging | Out-Null

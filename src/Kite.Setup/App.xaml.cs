@@ -5,7 +5,8 @@ namespace Kite.Setup;
 
 /// <summary>
 /// Interactive by default. Silent use:
-///   KiteSetup.exe --silent [--portable] [--folder "path"] [--desktop] [--no-autostart] [--no-launch]
+///   KiteSetup.exe --silent [--portable] [--folder "path"] [--desktop] [--no-autostart] [--no-launch] [--close-launchy]
+///   KiteSetup.exe --silent --update --folder "path" [--portable]   (in-place update; keeps shortcuts/autostart)
 ///   "Uninstall Kite.exe" --uninstall --silent [--remove-data]
 /// Errors from silent runs go to %TEMP%\KiteSetup.log and the exit code is non-zero.
 /// </summary>
@@ -56,7 +57,12 @@ public partial class App : Application
                 var folder = folderIndex >= 0 && folderIndex + 1 < args.Length
                     ? args[folderIndex + 1]
                     : portable ? Installer.DefaultPortableFolder : Installer.DefaultInstallFolder;
-                Installer.Install(new InstallOptions(portable, folder, has("--desktop"), !portable && !has("--no-autostart"), !has("--no-launch")), progress);
+                // --update (used by Kite's built-in updater) keeps shortcuts and autostart exactly as they are.
+                var update = has("--update");
+                var options = update
+                    ? new InstallOptions(portable, folder, !portable && Installer.HasDesktopShortcut(folder), null, !has("--no-launch"))
+                    : new InstallOptions(portable, folder, has("--desktop"), !portable && !has("--no-autostart"), !has("--no-launch"), has("--close-launchy"));
+                Installer.Install(options, progress);
             }
             return 0;
         }

@@ -89,6 +89,8 @@
         <Style.Resources>
             <Style TargetType="MenuItem" BasedOn="{StaticResource KiteMenuItem}" />
             <Style TargetType="Separator" BasedOn="{StaticResource KiteMenuSeparator}" />
+            <!-- Menus look separators up under this key, not by type -->
+            <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator" BasedOn="{StaticResource KiteMenuSeparator}" />
         </Style.Resources>
     </Style>
 </ResourceDictionary>

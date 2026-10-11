@@ -16,7 +16,7 @@ public sealed class TrayIcon : IDisposable
 {
     private const int CallbackMessage = 0x8000 + 0x4B; // WM_APP + 'K'
     private const int IconId = 1;
-    private const int WM_LBUTTONUP = 0x0202, WM_RBUTTONUP = 0x0205, WM_CONTEXTMENU = 0x007B, NIN_SELECT = 0x0400, NIN_KEYSELECT = 0x0401;
+    private const int WM_LBUTTONUP = 0x0202, WM_RBUTTONUP = 0x0205, WM_CONTEXTMENU = 0x007B, NIN_SELECT = 0x0400, NIN_KEYSELECT = 0x0401, NIN_BALLOONUSERCLICK = 0x0405;
     private const int NIM_ADD = 0, NIM_MODIFY = 1, NIM_DELETE = 2, NIM_SETVERSION = 4;
     private const int NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4, NIF_INFO = 0x10, NIF_SHOWTIP = 0x80;
 
@@ -24,7 +24,7 @@ public sealed class TrayIcon : IDisposable
     private readonly HwndSource _window;
     private readonly int _taskbarCreated;
     private readonly IntPtr _icon;
-    private string _tooltip = "Kite";
+    private string _tooltip = "Kite Launcher";
     private bool _visible;
     private ContextMenu? _menu;
 
@@ -34,9 +34,13 @@ public sealed class TrayIcon : IDisposable
         _taskbarCreated = RegisterWindowMessage("TaskbarCreated");
         _window = new HwndSource(new HwndSourceParameters("KiteTrayHost") { ParentWindow = new IntPtr(-3), WindowStyle = 0, Width = 0, Height = 0 });
         _window.AddHook(WndProc);
+        _watchdog.Tick += (_, _) => WatchForClickAway();
         _icon = LoadAppIcon();
         Visible = true;
     }
+
+    /// <summary>Raised when the user clicks the last notification ("balloon"); see <see cref="Notify"/>.</summary>
+    public event Action? NotificationClicked;
 
     public bool Visible
     {
@@ -108,6 +112,9 @@ public sealed class TrayIcon : IDisposable
                 case WM_CONTEXTMENU or WM_RBUTTONUP:
                     ShowMenu();
                     break;
+                case NIN_BALLOONUSERCLICK:
+                    NotificationClicked?.Invoke();
+                    break;
             }
             handled = true;
         }
@@ -118,15 +125,89 @@ public sealed class TrayIcon : IDisposable
         return IntPtr.Zero;
     }
 
+    private Window? _anchor;
+
+    /// <summary>
+    /// Opens the menu just above the tray icon. A tray icon has no window of its own, so the menu is
+    /// anchored to a tiny invisible window placed at the mouse pointer and activated: that gives the
+    /// menu the right position (WPF flips it below when there's no room, e.g. a top taskbar) and makes
+    /// it close when you click anywhere else or press Esc.
+    /// </summary>
     private void ShowMenu()
     {
         _menu ??= BuildMenu();
         if (_menu.IsOpen) { _menu.IsOpen = false; return; }
         RefreshSkins();
-        _menu.Placement = PlacementMode.MousePoint;
+
+        _anchor ??= CreateAnchor();
+        GetCursorPos(out var cursor);
+        _anchor.Show();
+        var hwnd = new WindowInteropHelper(_anchor).Handle;
+        SetWindowPos(hwnd, new IntPtr(-1) /* HWND_TOPMOST */, cursor.X, cursor.Y, 1, 1, 0x0040 /* SWP_SHOWWINDOW */);
+        ForceForeground(hwnd);
+        _anchor.Activate();
+
+        _menu.PlacementTarget = _anchor;
+        _menu.Placement = PlacementMode.Top;
         _menu.IsOpen = true;
-        // Let the popup take focus so it closes when you click elsewhere.
-        if (PresentationSource.FromVisual(_menu) is HwndSource src) SetForegroundWindow(src.Handle);
+        _foregroundAtOpen = GetForegroundWindow();
+        _watchdog.Start();
+    }
+
+    /// <summary>
+    /// Belt and braces for "click away closes the menu": while it's open, close it as soon as a
+    /// window belonging to another program (desktop, taskbar, any app) becomes active.
+    /// </summary>
+    private readonly System.Windows.Threading.DispatcherTimer _watchdog = new() { Interval = TimeSpan.FromMilliseconds(150) };
+    private IntPtr _foregroundAtOpen;
+
+    private void WatchForClickAway()
+    {
+        if (_menu is not { IsOpen: true }) { _watchdog.Stop(); return; }
+        var foreground = GetForegroundWindow();
+        // Only react to a change: if taking focus failed, the previously active app is still in front.
+        if (foreground == IntPtr.Zero || foreground == _foregroundAtOpen) return;
+        GetWindowThreadProcessId(foreground, out var pid);
+        if (pid != (uint)Environment.ProcessId) _menu.IsOpen = false;
+    }
+
+    /// <summary>Windows only lets the active app take focus; attach to it briefly so the menu can.</summary>
+    private static void ForceForeground(IntPtr hwnd)
+    {
+        var foreground = GetForegroundWindow();
+        var fgThread = GetWindowThreadProcessId(foreground, out _);
+        var thisThread = GetCurrentThreadId();
+        var attach = fgThread != 0 && fgThread != thisThread;
+        if (attach) AttachThreadInput(fgThread, thisThread, true);
+        SetForegroundWindow(hwnd);
+        if (attach) AttachThreadInput(fgThread, thisThread, false);
+    }
+
+    private Window CreateAnchor()
+    {
+        var anchor = new Window
+        {
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
+            Background = System.Windows.Media.Brushes.Transparent,
+            ShowInTaskbar = false,
+            ShowActivated = true,
+            Topmost = true,
+            ResizeMode = ResizeMode.NoResize,
+            Width = 1,
+            Height = 1,
+            Left = -32000,
+            Top = -32000,
+            Title = "",
+        };
+        // Clicking another window deactivates the anchor: close the menu. When the menu closes, hide the anchor.
+        anchor.Deactivated += (_, _) => { if (_menu is { IsOpen: true }) _menu.IsOpen = false; };
+        _menu!.Closed += (_, _) =>
+        {
+            _watchdog.Stop();
+            anchor.Hide();
+        };
+        return anchor;
     }
 
     private MenuItem? _skins;
@@ -190,6 +271,7 @@ public sealed class TrayIcon : IDisposable
 
     public void Dispose()
     {
+        _anchor?.Close();
         Remove();
         _window.RemoveHook(WndProc);
         _window.Dispose();
@@ -219,6 +301,15 @@ public sealed class TrayIcon : IDisposable
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern bool Shell_NotifyIcon(int message, ref NOTIFYICONDATAW data);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int RegisterWindowMessage(string name);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT point);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+    [DllImport("user32.dll")] private static extern bool AttachThreadInput(uint attach, uint attachTo, bool doAttach);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT { public int X, Y; }
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern uint PrivateExtractIcons(string file, int index, int cx, int cy, IntPtr[] icons, int[] ids, uint count, uint flags);
     [DllImport("user32.dll")] private static extern IntPtr LoadIcon(IntPtr instance, IntPtr name);
     [DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr icon);

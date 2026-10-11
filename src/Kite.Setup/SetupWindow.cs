@@ -27,6 +27,8 @@ public sealed class SetupWindow : Window
     private Border _installCard = null!, _portableCard = null!;
     private FrameworkElement _installedOnly = null!;
     private TextBlock _folderNote = null!;
+    private TextBlock _hotkeyNote = null!;
+    private CheckBox _closeLaunchy = null!;
     private string _installFolder = Installer.DefaultInstallFolder;
     private string _portableFolder = Installer.DefaultPortableFolder;
 
@@ -34,7 +36,7 @@ public sealed class SetupWindow : Window
     {
         _mode = mode;
         _args = args;
-        Title = mode == SetupMode.Install ? $"Kite {Installer.Version} setup" : "Uninstall Kite";
+        Title = mode == SetupMode.Install ? $"Kite Launcher {Installer.Version} setup" : "Uninstall Kite Launcher";
         Width = 720;
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.CanMinimize;
@@ -72,7 +74,7 @@ public sealed class SetupWindow : Window
         panel.Children.Add(logo);
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         var title = new StackPanel { Orientation = Orientation.Horizontal };
-        title.Children.Add(new TextBlock { Text = "Kite", FontSize = 26, FontWeight = FontWeights.SemiBold });
+        title.Children.Add(new TextBlock { Text = "Kite Launcher", FontSize = 26, FontWeight = FontWeights.SemiBold });
         title.Children.Add(new TextBlock { Text = "v" + Installer.Version, FontSize = 12, Foreground = Res("S.Faint"), VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(8, 0, 0, 5) });
         text.Children.Add(title);
         text.Children.Add(new TextBlock { Text = "A fast, skinnable keystroke launcher for Windows", Foreground = Res("S.SubText"), FontSize = 13 });
@@ -140,13 +142,12 @@ public sealed class SetupWindow : Window
         options.Children.Add(installedOnly);
         _launch = Toggle("Open Kite when setup finishes", true);
         options.Children.Add(_launch);
+        _closeLaunchy = Toggle("Close Launchy now", true);
+        options.Children.Add(_closeLaunchy);
         stack.Children.Add(options);
 
-        stack.Children.Add(new TextBlock
-        {
-            Text = "Your Launchy setup (folders, hotkey, web searches, learned shortcuts) is imported automatically the first time Kite starts. Quit Launchy first if you want Kite to use the same hotkey.",
-            TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = Res("S.SubText"), Margin = new Thickness(0, 20, 0, 0),
-        });
+        _hotkeyNote = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = Res("S.SubText"), Margin = new Thickness(0, 16, 0, 0), LineHeight = 18 };
+        stack.Children.Add(_hotkeyNote);
 
         SetPage(stack);
         SetFooter(("Cancel", false, Close), ("Install", true, StartInstall));
@@ -172,6 +173,25 @@ public sealed class SetupWindow : Window
             : _portable
                 ? "Everything Kite saves will live in this folder."
                 : $"Settings are kept in {Installer.DataFolder}.";
+        UpdateHotkeyNote();
+    }
+
+    /// <summary>Tells the user which hotkey Kite will really use, and offers to close Launchy if it holds it.</summary>
+    private void UpdateHotkeyNote()
+    {
+        if (_hotkeyNote is null || _closeLaunchy is null) return;
+        var hotkey = Hotkeys.Expected(_portable, _folder.Text.Trim());
+        var conflict = Hotkeys.ConflictsWithLaunchy(hotkey);
+        var fromLaunchy = Hotkeys.LaunchyHotkey() is { } lh && lh.Equals(hotkey, StringComparison.OrdinalIgnoreCase);
+
+        var text = fromLaunchy
+            ? $"Kite will use your Launchy hotkey, {hotkey}, and import the rest of your Launchy setup (folders, web searches, learned shortcuts) the first time it starts."
+            : $"Kite will open with {hotkey}. You can change it any time in Kite's settings.";
+        if (conflict)
+            text += $" Launchy is running and holding {hotkey}, so close it to let Kite take over. Launchy also starts with Windows: turn that off (or uninstall it) so the two don't compete.";
+        _hotkeyNote.Text = text;
+        _closeLaunchy.Content = $"Close Launchy now (it's using {hotkey})";
+        _closeLaunchy.Visibility = conflict ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void StartInstall()
@@ -183,16 +203,20 @@ public sealed class SetupWindow : Window
             _folderNote.Foreground = Res("S.Danger");
             return;
         }
-        var options = new InstallOptions(_portable, folder, _desktop.IsChecked == true, !_portable && _autostart.IsChecked == true, _launch.IsChecked == true);
+        var hotkey = Hotkeys.Expected(_portable, folder);
+        var closeLaunchy = _closeLaunchy.Visibility == Visibility.Visible && _closeLaunchy.IsChecked == true;
+        var launchyInTheWay = Hotkeys.ConflictsWithLaunchy(hotkey) && !closeLaunchy;
+        var options = new InstallOptions(_portable, folder, _desktop.IsChecked == true, !_portable && _autostart.IsChecked == true, _launch.IsChecked == true, closeLaunchy);
         var (bar, status) = ShowProgress(_portable ? "Setting up portable Kite…" : "Installing Kite…");
         var progress = new Progress<(double Fraction, string Status)>(p => { bar.Width = 600 * p.Fraction; status.Text = p.Status; });
         try
         {
             await Task.Run(() => Installer.Install(options, progress));
             ShowMessage(
-                _portable ? "Portable Kite is ready" : "Kite is installed",
+                _portable ? "Portable Kite Launcher is ready" : "Kite Launcher is installed",
                 (_portable ? $"Kite is in {folder}. Run Kite.exe from there - copy the folder anywhere you like." : $"Kite is in {folder} and in your Start menu.")
-                + "\n\nPress your hotkey (Alt+Space by default) to open it, or click the kite icon in the tray. Right-click the launcher or press Ctrl+, for settings.",
+                + $"\n\nPress {hotkey} to open it, or click the kite icon in the tray. Right-click the launcher or press Ctrl+, for settings."
+                + (launchyInTheWay ? $"\n\nLaunchy is still running and using {hotkey}. Quit it and Kite picks the hotkey up automatically, or choose another hotkey in Kite's settings." : ""),
                 error: false);
         }
         catch (Exception ex)
@@ -206,7 +230,7 @@ public sealed class SetupWindow : Window
         var folder = Installer.FolderFromArgs(_args);
         if (folder is null)
         {
-            ShowMessage("Kite isn't installed", "There's no installed copy of Kite to remove. (Portable copies are removed by deleting their folder.)", error: false);
+            ShowMessage("Kite Launcher isn't installed", "There's no installed copy of Kite to remove. (Portable copies are removed by deleting their folder.)", error: false);
             return;
         }
 
@@ -226,7 +250,7 @@ public sealed class SetupWindow : Window
             {
                 var wipe = removeData.IsChecked == true;
                 await Task.Run(() => Installer.Uninstall(folder, wipe, progress));
-                ShowMessage("Kite has been removed", wipe ? "Kite and your settings are gone (settings are in the Recycle Bin)." : $"Your settings are still in {Installer.DataFolder} in case you reinstall.", error: false);
+                ShowMessage("Kite Launcher has been removed", wipe ? "Kite and your settings are gone (settings are in the Recycle Bin)." : $"Your settings are still in {Installer.DataFolder} in case you reinstall.", error: false);
             }
             catch (Exception ex)
             {

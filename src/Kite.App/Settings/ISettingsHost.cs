@@ -1,3 +1,5 @@
+using Kite.App.Services;
+using Kite.Core.Updates;
 using Kite.Core.Skins;
 
 namespace Kite.App.Settings;
@@ -13,6 +15,8 @@ public interface ISettingsHost
 
     /// <summary>Registers a new global hotkey; returns an error message or null on success.</summary>
     string? ApplyHotkey(string text);
+    /// <summary>Why the configured hotkey isn't working right now (e.g. "Ctrl+Space is being used by Launchy"), or null.</summary>
+    string? HotkeyError { get; }
     /// <summary>Temporarily releases the hotkey so the hotkey box can capture it.</summary>
     void SuspendHotkey(bool suspend);
 
@@ -25,4 +29,11 @@ public interface ISettingsHost
     void OpenSettingsJson();
     void OpenFolder(string path);
     void OpenFile(string path);
+
+    UpdateService Updates { get; }
+    /// <summary>Checks GitHub; with <paramref name="announce"/> a new version also shows a notification.</summary>
+    Task<UpdateInfo?> CheckForUpdatesAsync(bool announce);
+    /// <summary>Downloads, verifies and installs the available update; Kite restarts when it's done.</summary>
+    Task InstallUpdateAsync(IProgress<double> progress);
+    void OpenUrl(string url);
 }

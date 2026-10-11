@@ -607,7 +607,7 @@ public partial class LauncherWindow : Window
             Logger.Log($"Launch failed for {row.Item.Target}: {ex.Message}");
             // Cancelling a UAC prompt is not an error worth showing.
             if (ex is not System.ComponentModel.Win32Exception { NativeErrorCode: 1223 })
-                MessageBox.Show(this, $"Could not launch {row.Item.Name}:\n{ex.Message}", "Kite", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, $"Could not launch {row.Item.Name}:\n{ex.Message}", "Kite Launcher", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

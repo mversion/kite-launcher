@@ -665,8 +665,23 @@ public partial class SettingsWindow : Window
 
     private void BuildAbout()
     {
-        var s = AddSection("About", "\uE946", "Files, import and keyboard reference.");
+        var s = AddSection("About", "\uE946", "Version, updates, files and keyboard reference.");
         var p = Services.Paths;
+
+        var assembly = typeof(SettingsWindow).Assembly;
+        var author = assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyCompanyAttribute), false)
+            .OfType<System.Reflection.AssemblyCompanyAttribute>().FirstOrDefault()?.Company ?? "";
+        var version = Kite.App.Services.UpdateService.CurrentVersion.ToString(3);
+        Add(s, "Kite Launcher", $"Version {version}  \u00B7  by {author}  \u00B7  A fast, skinnable keystroke launcher for Windows" + (p.IsPortable ? "  \u00B7  portable" : ""),
+            "about version author credits name github kite launcher bilgin ozkan",
+            ActionButton("GitHub", () => _host.OpenUrl($"https://github.com/{Kite.App.Services.UpdateService.Owner}/{Kite.App.Services.UpdateService.Repo}")));
+
+        Add(s, "Updates", "Kite Launcher checks GitHub for new versions. Updating downloads the new version, checks it's genuine, installs it over this copy and restarts Kite - your settings stay as they are.",
+            "update upgrade new version check download install release github", null, UpdatePanel());
+
+        var g = Cfg.General;
+        Add(s, "Check for updates automatically", "Look for a new version about once a day and show a notification when there is one. Kite never installs anything without asking.",
+            "update automatic check daily notification", Toggle(g.CheckForUpdates, v => g.CheckForUpdates = v, Apply.Save));
 
         Add(s, "Keyboard", string.Join("\n",
                 "Enter - launch   ·   Tab - pass text to the item (\"email ⇥ bob@x.com\")",
@@ -684,6 +699,78 @@ public partial class SettingsWindow : Window
             ActionButton("Open log", () => _host.OpenFile(p.LogFile)));
         Add(s, "Import from Launchy", "Bring over directories, hotkey, Weby sites, Runner commands, Calcy options and learned shortcuts from launchy.ini. Launchy's files are only read.",
             "launchy import migrate ini history", ActionButton("Import…", () => _host.ImportLaunchy()));
+    }
+
+    /// <summary>Status line, "Check now" / "Update now" buttons, progress and a link to the release notes.</summary>
+    private FrameworkElement UpdatePanel()
+    {
+        var updates = _host.Updates;
+        var status = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+        var check = new Button { Content = "Check now", MinWidth = 100 };
+        var install = new Button { Content = "Update now", MinWidth = 110, Margin = new Thickness(8, 0, 0, 0), Style = (Style)FindResource("S.AccentButton") };
+        var notes = new Button { Content = "What's new", Margin = new Thickness(8, 0, 0, 0) };
+        var barFill = new Border { Height = 4, CornerRadius = new CornerRadius(2), HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
+        barFill.SetResourceReference(Border.BackgroundProperty, "Kite.Accent");
+        var bar = new Border { Height = 4, CornerRadius = new CornerRadius(2), Background = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x3A)), Margin = new Thickness(0, 10, 0, 0), Child = barFill, Visibility = Visibility.Collapsed };
+
+        void Render()
+        {
+            var g = Cfg.General;
+            var lastChecked = g.LastUpdateCheck is { } t ? $" Last checked {t.ToLocalTime():d MMM, HH:mm}." : "";
+            if (updates.IsChecking) { status.Text = "Checking GitHub…"; status.Foreground = Sub; }
+            else if (updates.Available is { } u) { status.Text = $"Version {u.Version.ToString(3)} is available (you have {Kite.App.Services.UpdateService.CurrentVersion.ToString(3)})."; status.Foreground = (Brush)FindResource("S.Ok"); }
+            else if (updates.LastError is { } err) { status.Text = $"Couldn't check for updates: {err}"; status.Foreground = (Brush)FindResource("S.Danger"); }
+            else if (g.LastUpdateCheck is not null) { status.Text = "You have the latest version." + lastChecked; status.Foreground = Sub; }
+            else { status.Text = "Not checked yet."; status.Foreground = Sub; }
+            install.Visibility = updates.Available is null ? Visibility.Collapsed : Visibility.Visible;
+            notes.Visibility = updates.Available is null ? Visibility.Collapsed : Visibility.Visible;
+            check.IsEnabled = !updates.IsChecking;
+        }
+
+        check.Click += async (_, _) =>
+        {
+            check.IsEnabled = false;
+            status.Text = "Checking GitHub…";
+            await _host.CheckForUpdatesAsync(announce: false);
+            Render();
+        };
+        notes.Click += (_, _) => { if (updates.Available is { } u) _host.OpenUrl(u.PageUrl); };
+        install.Click += async (_, _) =>
+        {
+            check.IsEnabled = install.IsEnabled = false;
+            bar.Visibility = Visibility.Visible;
+            status.Foreground = Sub;
+            status.Text = "Downloading…";
+            var progress = new Progress<double>(f =>
+            {
+                barFill.Width = Math.Max(0, bar.ActualWidth * f);
+                status.Text = $"Downloading… {f:P0}";
+            });
+            try
+            {
+                await _host.InstallUpdateAsync(progress);
+                status.Text = "Installing - Kite Launcher will restart in a moment…";
+                status.Foreground = (Brush)FindResource("S.Ok");
+            }
+            catch (Exception ex)
+            {
+                bar.Visibility = Visibility.Collapsed;
+                status.Text = "Update failed: " + ex.Message;
+                status.Foreground = (Brush)FindResource("S.Danger");
+                check.IsEnabled = install.IsEnabled = true;
+            }
+        };
+
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+        buttons.Children.Add(check);
+        buttons.Children.Add(install);
+        buttons.Children.Add(notes);
+        var panel = new StackPanel();
+        panel.Children.Add(status);
+        panel.Children.Add(bar);
+        panel.Children.Add(buttons);
+        Render();
+        return panel;
     }
 
     // =================================================================== search & navigation
@@ -1003,8 +1090,14 @@ public partial class SettingsWindow : Window
     private FrameworkElement HotkeyEditor()
     {
         var box = new TextBox { Text = Cfg.General.Hotkey, Width = 190, IsReadOnly = true, Cursor = Cursors.Hand, Tag = "Press keys…", HorizontalContentAlignment = HorizontalAlignment.Center, IsReadOnlyCaretVisible = false };
-        var status = new TextBlock { FontSize = 11.5, Foreground = Faint, Margin = new Thickness(0, 6, 0, 0), TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 220 };
+        var status = new TextBlock { FontSize = 11.5, Foreground = Faint, Margin = new Thickness(0, 6, 0, 0), TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 240 };
         status.Text = "Click, then press a combination";
+        if (_host.HotkeyError is { } problem)
+        {
+            // e.g. the hotkey imported from Launchy while Launchy is still running.
+            status.Text = $"{problem}. Quit it and Kite takes the hotkey automatically - or click here and press another combination.";
+            status.Foreground = (Brush)FindResource("S.Danger");
+        }
 
         box.GotKeyboardFocus += (_, _) =>
         {

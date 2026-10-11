@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using Kite.App.Services;
+using Kite.Core.Updates;
 using Kite.App.Settings;
 using Kite.App.Skins;
 using Kite.Core.Settings;
@@ -33,6 +34,9 @@ public partial class App : Application, ISettingsHost
     private DispatcherTimer? _settingsDebounce;
     private string? _lastSettingsText;
     private SettingsWindow? _settingsWindow;
+    private readonly UpdateService _updates = new();
+    private DispatcherTimer? _updateTimer;
+    private Action? _notificationAction;
     private bool _hotkeySuspended;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -58,7 +62,7 @@ public partial class App : Application, ISettingsHost
 
         var paths = KitePaths.ForCurrentProcess();
         Logger.Init(paths.LogFile);
-        Logger.Log($"Kite starting (data: {paths.DataDirectory}{(paths.IsPortable ? ", portable" : "")})");
+        Logger.Log($"Kite Launcher {typeof(App).Assembly.GetName().Version?.ToString(3)} starting (data: {paths.DataDirectory}{(paths.IsPortable ? ", portable" : "")})");
         DispatcherUnhandledException += (_, args) =>
         {
             Logger.Log($"Unhandled: {args.Exception}");
@@ -75,7 +79,7 @@ public partial class App : Application, ISettingsHost
 
         _services = new KiteServices(paths, Dispatcher);
         var firstRunImport = TryFirstRunImport();
-        ApplySetupChoices();
+        var justInstalled = ApplySetupChoices();
 
         RegisterPlugins();
         _services.Plugins.InitAll();
@@ -124,17 +128,22 @@ public partial class App : Application, ISettingsHost
             Exit = ExitApp,
         });
 
+        _tray.NotificationClicked += () => _notificationAction?.Invoke();
         ApplyRuntimeSettings(showHotkeyErrors: true);
         WatchSettingsFile();
+        StartUpdateChecks();
         ListenForSecondInstance();
 
-        _services.Catalog.Changed += snapshot => Dispatcher.BeginInvoke(() => _tray.SetTooltip($"Kite · {snapshot.Count} items"));
+        _services.Catalog.Changed += snapshot => Dispatcher.BeginInvoke(() => _tray.SetTooltip($"Kite Launcher · {snapshot.Count} items"));
         _ = _services.Catalog.RebuildAsync();
         _services.Catalog.StartAutoRefresh();
         Dispatcher.BeginInvoke(_window.Prewarm, DispatcherPriority.ApplicationIdle);
 
         if (firstRunImport is not null)
-            _tray.Notify("Imported your Launchy setup", firstRunImport);
+            Notify("Imported your Launchy setup", firstRunImport);
+        // A fresh install whose hotkey is taken (usually by Launchy) would otherwise look broken: show why.
+        if ((firstRunImport is not null || justInstalled) && _hotkeyError is not null)
+            Dispatcher.BeginInvoke(() => OpenSettingsWindow("General"), DispatcherPriority.ApplicationIdle);
         if (e.Args.Any(a => a.Equals("--settings", StringComparison.OrdinalIgnoreCase)))
             OpenSettingsWindow();
     }
@@ -160,10 +169,10 @@ public partial class App : Application, ISettingsHost
     /// The installer leaves its choices (e.g. start with Windows) in setup.json next to the
     /// settings; apply them once - after the first-run Launchy import - and remove the file.
     /// </summary>
-    private void ApplySetupChoices()
+    private bool ApplySetupChoices()
     {
         var file = Path.Combine(_services.Paths.DataDirectory, "setup.json");
-        if (!File.Exists(file)) return;
+        if (!File.Exists(file)) return false;
         try
         {
             var node = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(file));
@@ -176,6 +185,7 @@ public partial class App : Application, ISettingsHost
         }
         catch (Exception ex) { Logger.Log($"setup.json ignored: {ex.Message}"); }
         finally { try { File.Delete(file); } catch (IOException) { } }
+        return true;
     }
 
     /// <summary>On the very first run, bring over the user's Launchy configuration (read-only).</summary>
@@ -217,11 +227,11 @@ public partial class App : Application, ISettingsHost
             LaunchyImporter.Apply(result, _services.Settings, _services.History);
             _services.SaveHistoryNow();
             ReloadAll();
-            _tray.Notify("Launchy settings imported", result.Summary);
+            Notify("Launchy settings imported", result.Summary);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Import failed: {ex.Message}", "Kite", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"Import failed: {ex.Message}", "Kite Launcher", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -229,17 +239,113 @@ public partial class App : Application, ISettingsHost
     private void ApplyRuntimeSettings(bool showHotkeyErrors)
     {
         var g = _services.Settings.Current.General;
-        if (!_hotkey.Register(g.Hotkey, out var error))
-        {
-            Logger.Log($"Hotkey: {error}");
-            if (showHotkeyErrors)
-                _tray.Notify("Kite hotkey unavailable", $"{error}. Change it in Kite's settings (Ctrl+, or right-click the launcher), or click the tray icon to open Kite.", NotifyKind.Warning);
-        }
-        _hotkeyError = error;
+        if (!RegisterHotkey(g.Hotkey) && showHotkeyErrors)
+            Notify("Kite Launcher hotkey unavailable",
+                $"{_hotkeyError}. Kite will start using it as soon as it's free - or pick another hotkey in Settings (click the tray icon, then Ctrl+,).",
+                NotifyKind.Warning);
         ApplyRuntime();
     }
 
     private string? _hotkeyError;
+    private DispatcherTimer? _hotkeyRetry;
+
+    /// <summary>Shows a tray notification; <paramref name="onClick"/> runs if the user clicks it.</summary>
+    private void Notify(string title, string text, NotifyKind kind = NotifyKind.Info, Action? onClick = null)
+    {
+        _notificationAction = onClick;
+        _tray.Notify(title, text, kind);
+    }
+
+    // ---------------------------------------------------------------- updates
+
+    public UpdateService Updates => _updates;
+
+    /// <summary>Checks GitHub shortly after startup and then about once a day (if enabled).</summary>
+    private void StartUpdateChecks()
+    {
+        var first = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(45) };
+        first.Tick += async (_, _) => { first.Stop(); await AutoCheckForUpdatesAsync(); };
+        first.Start();
+        _updateTimer = new DispatcherTimer(TimeSpan.FromHours(1), DispatcherPriority.Background, async (_, _) => await AutoCheckForUpdatesAsync(), Dispatcher);
+        _updateTimer.Start();
+    }
+
+    private async Task AutoCheckForUpdatesAsync()
+    {
+        var g = _services.Settings.Current.General;
+        if (!g.CheckForUpdates) return;
+        if (g.LastUpdateCheck is { } last && DateTime.UtcNow - last < TimeSpan.FromHours(20)) return;
+        await CheckForUpdatesAsync(announce: true);
+    }
+
+    public async Task<UpdateInfo?> CheckForUpdatesAsync(bool announce)
+    {
+        var update = await _updates.CheckAsync();
+        var g = _services.Settings.Current.General;
+        if (_updates.LastError is null) g.LastUpdateCheck = DateTime.UtcNow;
+        var version = update?.Version.ToString(3);
+        var fresh = update is not null && g.UpdateNotifiedVersion != version;
+        if (fresh && announce) g.UpdateNotifiedVersion = version;
+        _services.Settings.Save();
+        if (fresh && announce)
+            Notify($"Kite Launcher {version} is available", "Click here to see what's new and update.", NotifyKind.Info, () => OpenSettingsWindow("About"));
+        return update;
+    }
+
+    /// <summary>Downloads and verifies the update, then hands over to the installer (which closes and restarts Kite).</summary>
+    public async Task InstallUpdateAsync(IProgress<double> progress)
+    {
+        var update = _updates.Available ?? await _updates.CheckAsync() ?? throw new InvalidOperationException("No update is available.");
+        var setup = await _updates.DownloadAsync(update, progress);
+        _services.SaveHistoryNow();
+        _services.Settings.Save();
+        UpdateService.RunInstaller(setup, _services.Paths);
+    }
+
+    public void OpenUrl(string url) => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose();
+
+    public string? HotkeyError => _hotkeyError;
+
+    /// <summary>
+    /// Registers the hotkey. If another program (typically Launchy) holds it, remembers a clear
+    /// reason and keeps retrying in the background, so quitting that program is all it takes.
+    /// </summary>
+    private bool RegisterHotkey(string text)
+    {
+        if (_hotkey.Register(text, out var error))
+        {
+            _hotkeyError = null;
+            _hotkeyRetry?.Stop();
+            return true;
+        }
+        var taken = HotkeyService.IsTakenError(error);
+        _hotkeyError = taken ? HotkeyConflictMessage(text) : error;
+        Logger.Log($"Hotkey: {_hotkeyError}");
+        if (taken) StartHotkeyRetry();
+        return false;
+    }
+
+    private static string HotkeyConflictMessage(string text) =>
+        Process.GetProcessesByName("Launchy").Length > 0
+            ? $"{text} is being used by Launchy"
+            : $"{text} is already used by another program";
+
+    private void StartHotkeyRetry()
+    {
+        _hotkeyRetry ??= new DispatcherTimer(TimeSpan.FromSeconds(3), DispatcherPriority.Background, (_, _) =>
+        {
+            if (_hotkeySuspended) return;
+            if (_hotkeyError is null) { _hotkeyRetry!.Stop(); return; }
+            var hotkey = _services.Settings.Current.General.Hotkey;
+            if (!_hotkey.Register(hotkey, out _)) return;
+            _hotkeyRetry!.Stop();
+            _hotkeyError = null;
+            ApplyRuntime();
+            Logger.Log($"Hotkey {hotkey} became free and is now registered");
+            Notify("Kite Launcher is ready", $"Press {hotkey} to open Kite.");
+        }, Dispatcher);
+        _hotkeyRetry.Start();
+    }
 
     // ---------------------------------------------------------------- memory
 
@@ -307,13 +413,17 @@ public partial class App : Application, ISettingsHost
 
     public void ReloadSkin() => _skins.Reload();
 
+    /// <summary>Tries a new hotkey typed in Settings; on failure the configured one is restored when the box loses focus.</summary>
     public string? ApplyHotkey(string text)
     {
-        var ok = _hotkey.Register(text, out var error);
-        _hotkeyError = ok ? null : error;
-        _hotkeySuspended = false;
-        ApplyRuntime();
-        return error;
+        if (_hotkey.Register(text, out var error))
+        {
+            _hotkeyError = null;
+            _hotkeyRetry?.Stop();
+            ApplyRuntime();
+            return null;
+        }
+        return HotkeyService.IsTakenError(error) ? HotkeyConflictMessage(text) + " - try another combination" : error;
     }
 
     public void SuspendHotkey(bool suspend)
@@ -323,8 +433,7 @@ public partial class App : Application, ISettingsHost
         if (suspend) _hotkey.Unregister();
         else
         {
-            _hotkey.Register(_services.Settings.Current.General.Hotkey, out var error);
-            _hotkeyError = error;
+            RegisterHotkey(_services.Settings.Current.General.Hotkey);
             ApplyRuntime();
         }
     }
@@ -406,7 +515,7 @@ public partial class App : Application, ISettingsHost
                 catch (Exception ex)
                 {
                     Logger.Log($"Settings reload failed: {ex.Message}");
-                    _tray.Notify("settings.json has an error", ex.Message, NotifyKind.Error);
+                    Notify("settings.json has an error", ex.Message, NotifyKind.Error);
                 }
             }, Dispatcher);
             _settingsDebounce.Stop();

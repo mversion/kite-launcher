@@ -60,6 +60,11 @@ public sealed class GeneralSettings
     public bool ReleaseMemoryWhenHidden { get; set; } = true;
     /// <summary>Render without the GPU: avoids loading the graphics driver into Kite (less memory). Applies on restart.</summary>
     public bool SoftwareRendering { get; set; } = true;
+    /// <summary>Check GitHub once a day for a new version (installing always asks first).</summary>
+    public bool CheckForUpdates { get; set; } = true;
+    public DateTime? LastUpdateCheck { get; set; }
+    /// <summary>Newest version already announced, so each release is only notified once.</summary>
+    public string? UpdateNotifiedVersion { get; set; }
 }
 
 [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<OpenOnMonitor>))]

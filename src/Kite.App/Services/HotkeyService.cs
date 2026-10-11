@@ -33,9 +33,14 @@ public sealed class HotkeyService : IDisposable
         }
         var vk = (uint)KeyInterop.VirtualKeyFromKey(key);
         _registered = RegisterHotKey(_source.Handle, HotkeyId, modifiers | MOD_NOREPEAT, vk);
-        error = _registered ? null : $"{text} is already used by another program (is Launchy still running?)";
+        error = _registered ? null : $"{text} {TakenSuffix}";
         return _registered;
     }
+
+    private const string TakenSuffix = "is already used by another program";
+
+    /// <summary>True when registration failed because another program owns the combination (worth retrying).</summary>
+    public static bool IsTakenError(string? error) => error?.EndsWith(TakenSuffix, StringComparison.Ordinal) == true;
 
     public void Unregister()
     {

@@ -8,7 +8,8 @@ using Microsoft.Win32;
 
 namespace Kite.Setup;
 
-public sealed record InstallOptions(bool Portable, string Folder, bool DesktopShortcut, bool StartWithWindows, bool LaunchWhenDone);
+/// <param name="StartWithWindows">null leaves the current autostart setting alone (updates).</param>
+public sealed record InstallOptions(bool Portable, string Folder, bool DesktopShortcut, bool? StartWithWindows, bool LaunchWhenDone, bool CloseLaunchy = false);
 
 /// <summary>
 /// Per-user install (no admin): files in %LocalAppData%\Programs\Kite, Start menu shortcut,
@@ -60,8 +61,14 @@ public static class Installer
 
     public static string DataFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Kite");
 
-    private static string StartMenuShortcut => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Kite.lnk");
-    private static string DesktopShortcut => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Kite.lnk");
+    private static string StartMenuShortcut => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Kite Launcher.lnk");
+    private static string OldStartMenuShortcut => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Kite.lnk");
+    /// <summary>True if the user has a desktop shortcut to this install (kept as-is by updates).</summary>
+    public static bool HasDesktopShortcut(string folder) =>
+        ShellLink.PointsInto(DesktopShortcut, folder) || ShellLink.PointsInto(OldDesktopShortcut, folder);
+
+    private static string OldDesktopShortcut => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Kite.lnk");
+    private static string DesktopShortcut => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Kite Launcher.lnk");
 
     // ================================================================= install
 
@@ -72,6 +79,11 @@ public static class Installer
 
         progress.Report((0.05, "Closing Kite if it's running…"));
         CloseRunningKite();
+        if (o.CloseLaunchy)
+        {
+            progress.Report((0.08, "Closing Launchy…"));
+            Hotkeys.CloseLaunchy();
+        }
 
         progress.Report((0.1, "Copying files…"));
         Directory.CreateDirectory(folder);
@@ -106,13 +118,15 @@ public static class Installer
             if (self is not null && !Path.GetFullPath(self).Equals(Path.Combine(folder, UninstallerName), StringComparison.OrdinalIgnoreCase))
                 File.Copy(self, Path.Combine(folder, UninstallerName), overwrite: true);
 
-            ShellLink.Create(StartMenuShortcut, exe, "Kite - fast keystroke launcher", folder);
-            if (o.DesktopShortcut) ShellLink.Create(DesktopShortcut, exe, "Kite - fast keystroke launcher", folder);
+            ShellLink.Create(StartMenuShortcut, exe, "Kite Launcher - fast keystroke launcher", folder);
+            if (ShellLink.PointsInto(OldStartMenuShortcut, folder)) File.Delete(OldStartMenuShortcut); // pre-0.3 name
+            if (ShellLink.PointsInto(OldDesktopShortcut, folder)) File.Delete(OldDesktopShortcut); // pre-0.3 name
+            if (o.DesktopShortcut) ShellLink.Create(DesktopShortcut, exe, "Kite Launcher - fast keystroke launcher", folder);
             else if (ShellLink.PointsInto(DesktopShortcut, folder)) File.Delete(DesktopShortcut);
 
             progress.Report((0.92, "Registering with Windows…"));
             RegisterUninstall(folder);
-            SetAutostart(exe, o.StartWithWindows);
+            if (o.StartWithWindows is { } autostart) SetAutostart(exe, autostart);
         }
 
         if (o.LaunchWhenDone)
@@ -126,9 +140,9 @@ public static class Installer
     private static void RegisterUninstall(string folder)
     {
         using var key = Registry.CurrentUser.CreateSubKey(UninstallKey);
-        key.SetValue("DisplayName", "Kite");
+        key.SetValue("DisplayName", "Kite Launcher");
         key.SetValue("DisplayVersion", Version);
-        key.SetValue("Publisher", "mversion");
+        key.SetValue("Publisher", "Bilgin Ozkan");
         key.SetValue("DisplayIcon", Path.Combine(folder, "Kite.exe"));
         key.SetValue("InstallLocation", folder);
         key.SetValue("InstallDate", DateTime.Now.ToString("yyyyMMdd"));
@@ -213,7 +227,7 @@ public static class Installer
         CloseRunningKite();
 
         progress.Report((0.3, "Removing shortcuts and registry entries…"));
-        foreach (var lnk in new[] { StartMenuShortcut, DesktopShortcut })
+        foreach (var lnk in new[] { StartMenuShortcut, OldStartMenuShortcut, DesktopShortcut, OldDesktopShortcut })
             if (ShellLink.PointsInto(lnk, folder)) File.Delete(lnk);
         using (var run = Registry.CurrentUser.OpenSubKey(RunKey, writable: true))
         {
