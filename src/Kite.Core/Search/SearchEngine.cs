@@ -98,8 +98,9 @@ public sealed class SearchEngine
     /// Ordering with an owner chip: suggestions the plugin is confident about, then the owner itself
     /// (Enter = launch owner with the typed arguments), then other suggestions.
     /// </summary>
-    public static List<CatItem> MergeOwner(CatItem owner, Query query, IReadOnlyList<CatItem> plugin)
+    public static List<CatItem> MergeOwner(CatItem owner, Query query, IReadOnlyList<CatItem> plugin, History? history = null)
     {
+        if (history is not null) plugin = ApplyPicks(owner, query, plugin, history);
         var ownerRow = owner with
         {
             Description = query.ArgumentText.Length == 0 ? owner.Description : $"{owner.Name}  ▸  {query.ArgumentText}",
@@ -109,5 +110,38 @@ public sealed class SearchEngine
         result.Add(ownerRow);
         result.AddRange(plugin.Where(p => p.Score <= 0).OrderByDescending(p => p.Score));
         return result;
+    }
+
+    private const int PickedScore = 1_000_000;
+
+    /// <summary>
+    /// Puts the result picked last time for this search first. For the exact search it is shown even before
+    /// the plugin answers (or if it dropped out of the plugin's results), as long as the file still exists;
+    /// for a partial search ("pass" of "password reset") it is lifted only when it's among the results.
+    /// </summary>
+    public static IReadOnlyList<CatItem> ApplyPicks(CatItem owner, Query query, IReadOnlyList<CatItem> plugin, History history)
+    {
+        var search = History.NormalizeSearch(query.ArgumentText);
+        if (search.Length == 0) return plugin;
+        var list = plugin.ToList();
+
+        if (history.LookupPick(owner.Key, search) is { } exact)
+        {
+            var i = list.FindIndex(p => string.Equals(p.Key, exact.ItemKey, StringComparison.OrdinalIgnoreCase));
+            if (i >= 0) list[i] = list[i] with { Score = PickedScore };
+            else if (!exact.Target.StartsWith(@"\\", StringComparison.Ordinal) && (File.Exists(exact.Target) || Directory.Exists(exact.Target)))
+                list.Add(exact.ToItem() with { Score = PickedScore });
+            return list;
+        }
+
+        if (search.Length < 3) return list;
+        foreach (var pick in history.PicksStartingWith(owner.Key, search))
+        {
+            var i = list.FindIndex(p => string.Equals(p.Key, pick.ItemKey, StringComparison.OrdinalIgnoreCase));
+            if (i < 0) continue;
+            list[i] = list[i] with { Score = PickedScore - 1 };
+            break;
+        }
+        return list;
     }
 }

@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 using Kite.Core.Settings;
+using Kite.Plugins;
 
 namespace Kite.Core.Search;
 
@@ -17,6 +19,28 @@ public sealed class History
         public Dictionary<string, LearnedPrefix> Prefixes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         /// <summary>Item key → usage.</summary>
         public Dictionary<string, Usage> Usage { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Owner key + search text ("everything ⇥ password reset") → the result picked for it.</summary>
+        public Dictionary<string, Pick> Picks { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A result chosen from an owner's results (e.g. a file from "e ⇥ invoice"), enough to show it again.</summary>
+    public sealed class Pick
+    {
+        public string Search { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Target { get; set; } = "";
+        public string? Description { get; set; }
+        public string? PluginId { get; set; }
+        public string? Data { get; set; }
+        public int Count { get; set; }
+        public DateTime LastUsed { get; set; }
+
+        public string ItemKey => PluginId is null ? Target : $"{PluginId}:{Target}";
+
+        public CatItem ToItem() => new()
+        {
+            Name = Name, Target = Target, Description = Description, PluginId = PluginId, Data = Data, IconPath = Target,
+        };
     }
 
     public sealed class LearnedPrefix
@@ -46,6 +70,7 @@ public sealed class History
             // JSON loses the comparer; rebuild case-insensitive dictionaries.
             _data.Prefixes = new(_data.Prefixes, StringComparer.OrdinalIgnoreCase);
             _data.Usage = new(_data.Usage, StringComparer.OrdinalIgnoreCase);
+            _data.Picks = new(_data.Picks ?? new(), StringComparer.OrdinalIgnoreCase);
         }
     }
 
@@ -106,6 +131,58 @@ public sealed class History
                 Prune();
             }
         }
+    }
+
+    /// <summary>Search text as remembered for picks: trimmed, lower-case, single spaces.</summary>
+    public static string NormalizeSearch(string text) => Regex.Replace(text.Trim().ToLowerInvariant(), @"\s+", " ");
+
+    private static string PickKey(string ownerKey, string search) => $"{ownerKey}\u001f{search}";
+
+    /// <summary>Remembers that <paramref name="item"/> was chosen for <paramref name="search"/> under this owner.</summary>
+    public void RecordPick(string ownerKey, string search, CatItem item, DateTime? when = null)
+    {
+        var text = NormalizeSearch(search);
+        if (text.Length == 0) return;
+        lock (_gate)
+        {
+            var key = PickKey(ownerKey, text);
+            if (_data.Picks.TryGetValue(key, out var existing) && string.Equals(existing.ItemKey, item.Key, StringComparison.OrdinalIgnoreCase))
+                existing.Count++;
+            else
+                _data.Picks[key] = existing = new Pick { Search = text, Count = 1 };
+            existing.Name = item.Name;
+            existing.Target = item.Target;
+            existing.Description = item.Description;
+            existing.PluginId = item.PluginId;
+            existing.Data = item.Data;
+            existing.LastUsed = when ?? DateTime.UtcNow;
+            PrunePicks();
+        }
+    }
+
+    /// <summary>The result picked for exactly this search under this owner, if any.</summary>
+    public Pick? LookupPick(string ownerKey, string search)
+    {
+        lock (_gate) return _data.Picks.GetValueOrDefault(PickKey(ownerKey, NormalizeSearch(search)));
+    }
+
+    /// <summary>Picks for longer searches that start with <paramref name="search"/> ("pass" → "password reset"), most used first.</summary>
+    public List<Pick> PicksStartingWith(string ownerKey, string search)
+    {
+        var prefix = PickKey(ownerKey, NormalizeSearch(search));
+        lock (_gate)
+            return _data.Picks
+                .Where(p => p.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Select(p => p.Value)
+                .OrderByDescending(p => p.Count).ThenByDescending(p => p.LastUsed)
+                .ToList();
+    }
+
+    private void PrunePicks()
+    {
+        if (_data.Picks.Count <= MaxPrefixes) return;
+        foreach (var victim in _data.Picks.OrderBy(p => p.Value.LastUsed).Take(_data.Picks.Count - MaxPrefixes).Select(p => p.Key).ToList())
+            _data.Picks.Remove(victim);
     }
 
     /// <summary>Sets (or replaces) an alias explicitly, e.g. from the importer or the settings UI.</summary>

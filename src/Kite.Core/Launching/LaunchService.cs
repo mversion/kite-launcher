@@ -34,6 +34,9 @@ public sealed class LaunchService
                 handled = _plugins.Launch(selected, query, mode);
             if (!handled)
                 ShellLauncher.Launch(isOwnerRow ? owner.Target : selected.Target, isOwnerRow ? query.ArgumentText : null, mode);
+            // A file picked from the owner's results (e.g. "e ⇥ password reset") comes first next time.
+            if (!isOwnerRow && Path.IsPathRooted(selected.Target))
+                _history.RecordPick(owner.Key, query.ArgumentText, selected);
             Learn(ownerTypedText ?? "", owner);
             return;
         }

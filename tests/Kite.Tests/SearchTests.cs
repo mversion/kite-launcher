@@ -147,3 +147,57 @@ public class SearchEngineTests
         Assert.True(perQuery < 5, $"Average {perQuery:F2} ms per query");
     }
 }
+
+public class OwnerPickTests
+{
+    private static readonly CatItem Owner = new() { Name = "e", Target = "e", PluginId = "runner", Data = @"C:\Program Files\Everything\Everything.exe" };
+
+    private static CatItem File(string path, int score) =>
+        new() { Name = Path.GetFileName(path), Target = path, PluginId = "everything", Data = "result", Score = score };
+
+    private static Query Search(string text) => new($"e\t{text}", Owner, [text]);
+
+    [Fact]
+    public void Picked_file_comes_first_for_the_same_search()
+    {
+        using var dir = new TempDir();
+        var a = dir.File("a.pdf"); var b = dir.File("password reset.pdf");
+        var history = new History();
+        history.RecordPick(Owner.Key, "Password  Reset ", File(b, 0));
+
+        var merged = SearchEngine.MergeOwner(Owner, Search("password reset"), [File(a, 1000), File(b, 999)], history);
+        Assert.Equal(b, merged[0].Target);
+    }
+
+    [Fact]
+    public void Picked_file_shows_before_results_arrive_and_partial_search_lifts_it()
+    {
+        using var dir = new TempDir();
+        var a = dir.File("a.pdf"); var b = dir.File("b.pdf");
+        var history = new History();
+        history.RecordPick(Owner.Key, "password reset", File(b, 0));
+
+        var early = SearchEngine.MergeOwner(Owner, Search("password reset"), [], history);
+        Assert.Equal(b, early[0].Target);                                   // shown while Everything is still searching
+
+        var partial = SearchEngine.MergeOwner(Owner, Search("pass"), [File(a, 1000), File(b, 999)], history);
+        Assert.Equal(b, partial[0].Target);
+        var other = SearchEngine.MergeOwner(Owner, Search("invoice"), [File(a, 1000), File(b, 999)], history);
+        Assert.Equal(a, other[0].Target);                                    // unrelated searches are untouched
+    }
+
+    [Fact]
+    public void Picks_survive_save_and_load()
+    {
+        using var dir = new TempDir();
+        var b = dir.File("b.pdf");
+        var history = new History();
+        history.RecordPick(Owner.Key, "password reset", File(b, 0));
+        var path = Path.Combine(dir.Path, "history.json");
+        history.Save(path);
+
+        var loaded = new History();
+        loaded.Load(path);
+        Assert.Equal(b, loaded.LookupPick(Owner.Key, "PASSWORD RESET")?.Target);
+    }
+}

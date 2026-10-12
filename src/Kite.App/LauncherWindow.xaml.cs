@@ -372,8 +372,8 @@ public partial class LauncherWindow : Window
         catch (Exception ex) { Logger.Log($"Search failed: {ex.Message}"); }
     }
 
-    private static List<CatItem> Compose(Query query, List<CatItem> catalog, IReadOnlyList<CatItem> plugin, int max) =>
-        query.Owner is { } owner ? SearchEngine.MergeOwner(owner, query, plugin) : SearchEngine.Merge(catalog, plugin, max);
+    private List<CatItem> Compose(Query query, List<CatItem> catalog, IReadOnlyList<CatItem> plugin, int max) =>
+        query.Owner is { } owner ? SearchEngine.MergeOwner(owner, query, plugin, _services.History) : SearchEngine.Merge(catalog, plugin, max);
 
     private void Display(IReadOnlyList<CatItem> items)
     {
