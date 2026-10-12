@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Kite.Plugins;
+using Kite.Plugins.Builtin.Everything;
 
 namespace Kite.Plugins.Builtin.Runner;
 
@@ -17,6 +18,8 @@ public sealed class RunnerCommand
 public sealed class RunnerPlugin : IKitePlugin
 {
     public const string PluginId = "runner";
+    /// <summary>Settings flag: the one-time "e for Everything" setup has run (so a deleted "e" stays deleted).</summary>
+    public const string EverythingCheckedKey = "everythingCommandChecked";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private IPluginContext _ctx = null!;
     private List<RunnerCommand> _commands = [];
@@ -32,11 +35,32 @@ public sealed class RunnerPlugin : IKitePlugin
         _ctx = context;
         var node = context.Settings["commands"];
         _commands = node?.Deserialize<List<RunnerCommand>>(JsonOptions) ?? DefaultCommands();
-        if (node is null)
+        var changed = node is null;
+        if (context.Settings[EverythingCheckedKey]?.GetValue<bool>() != true)
+        {
+            changed |= AddEverythingCommand(_commands, EverythingClient.LocateExecutable());
+            context.Settings[EverythingCheckedKey] = true;
+            changed = true;
+        }
+        if (changed)
         {
             context.Settings["commands"] = JsonSerializer.SerializeToNode(_commands, JsonOptions);
             context.SaveSettings();
         }
+    }
+
+    /// <summary>
+    /// When Everything is installed, adds the Launchy-style "e" command for it (Everything's own plugin then
+    /// shows "e ⇥ query" results inline), unless there's already an "e" or a command that runs Everything.
+    /// </summary>
+    public static bool AddEverythingCommand(List<RunnerCommand> commands, string? everythingExe)
+    {
+        if (string.IsNullOrEmpty(everythingExe)) return false;
+        if (commands.Any(c => c.Name.Equals("e", StringComparison.OrdinalIgnoreCase) ||
+                              Path.GetFileName(c.File.Trim('"')).Equals("Everything.exe", StringComparison.OrdinalIgnoreCase)))
+            return false;
+        commands.Add(new RunnerCommand { Name = "e", File = everythingExe, Args = "-search \"$$\"" });
+        return true;
     }
 
     public static List<RunnerCommand> DefaultCommands() =>

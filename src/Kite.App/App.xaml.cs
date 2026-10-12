@@ -119,7 +119,6 @@ public partial class App : Application, ISettingsHost
             Show = () => _window.ShowLauncher(),
             OpenSettings = () => OpenSettingsWindow(),
             Rescan = () => _ = _services.Catalog.RebuildAsync(),
-            ImportLaunchy = ImportLaunchyInteractive,
             OpenDataFolder = () => OpenFolder(paths.DataDirectory),
             OpenSkinsFolder = () => OpenFolder(_skins.CurrentFolder ?? paths.SkinRoots.Last()),
             ListSkins = () => _skins.Available().Select(s => s.Name).Order(StringComparer.OrdinalIgnoreCase),

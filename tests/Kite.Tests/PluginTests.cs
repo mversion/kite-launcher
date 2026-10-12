@@ -74,6 +74,35 @@ public class RunnerTests
     [InlineData("--flag", new[] { "x" }, "--flag x")]
     public void Fills_placeholders(string template, string[] inputs, string expected) =>
         Assert.Equal(expected, RunnerPlugin.FillArguments(template, inputs));
+
+    private const string EverythingExe = @"C:\Program Files\Everything\Everything.exe";
+
+    [Fact]
+    public void Adds_e_for_Everything_when_installed()
+    {
+        var commands = RunnerPlugin.DefaultCommands();
+        Assert.True(RunnerPlugin.AddEverythingCommand(commands, EverythingExe));
+        var e = Assert.Single(commands, c => c.Name == "e");
+        Assert.Equal(EverythingExe, e.File);
+        Assert.True(new Kite.Plugins.Builtin.Everything.EverythingPlugin().HandlesOwner(
+            new Kite.Plugins.CatItem { Name = "e", Target = "e", PluginId = RunnerPlugin.PluginId, Data = e.File }));
+    }
+
+    [Fact]
+    public void Leaves_commands_alone_without_Everything_or_with_an_existing_one()
+    {
+        var none = RunnerPlugin.DefaultCommands();
+        Assert.False(RunnerPlugin.AddEverythingCommand(none, null));
+        Assert.DoesNotContain(none, c => c.Name == "e");
+
+        var ownE = new List<RunnerCommand> { new() { Name = "E", File = "notepad.exe" } };
+        Assert.False(RunnerPlugin.AddEverythingCommand(ownE, EverythingExe));
+        Assert.Single(ownE);
+
+        var ownEverything = new List<RunnerCommand> { new() { Name = "find", File = "\"D:\\Tools\\Everything.exe\"" } };
+        Assert.False(RunnerPlugin.AddEverythingCommand(ownEverything, EverythingExe));
+        Assert.Single(ownEverything);
+    }
 }
 
 public class WebyTests
