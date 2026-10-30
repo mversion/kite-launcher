@@ -131,3 +131,65 @@ public class WebyTests
     [InlineData("readme.txt", false)]
     public void Detects_urls(string text, bool expected) => Assert.Equal(expected, WebyPlugin.LooksLikeUrl(text));
 }
+
+public class RustDeskTests
+{
+    private const string PeerFile = """
+        password = [
+            48,
+            65,
+        ]
+        size = [0, 0, 0, 0]
+
+        [options]
+        codec-preference = 'auto'
+        alias = 'Lounge PC'
+
+        [ui_flutter]
+        wm_RemoteDesktop = '{"width":1280}'
+
+        [info]
+        username = 'mversion'
+        hostname = 'nuci7'
+        platform = 'Windows'
+
+        [transfer]
+        write_jobs = []
+        """;
+
+    [Fact]
+    public void Reads_names_and_ignores_everything_else()
+    {
+        var peer = Kite.Plugins.Builtin.RustDesk.RustDeskPlugin.ParsePeer("187922594", PeerFile.Split('\n'));
+        Assert.Equal("Lounge PC", peer.Alias);
+        Assert.Equal("mversion", peer.Username);
+        Assert.Equal("nuci7", peer.Hostname);
+        Assert.Equal("Lounge PC", peer.DisplayName);
+        Assert.Equal("nuci7", (peer with { Alias = null }).DisplayName);
+        Assert.Equal("187 922 594", (peer with { Alias = null, Hostname = null }).DisplayName);
+    }
+
+    [Theory]
+    [InlineData("187922594", "187 922 594")]
+    [InlineData("21060257", "21 060 257")]
+    [InlineData("123", "123")]
+    [InlineData("my-office", "my-office")]
+    public void Formats_ids_like_RustDesk(string id, string expected) =>
+        Assert.Equal(expected, Kite.Plugins.Builtin.RustDesk.RustDeskPlugin.FormatId(id));
+
+    [Fact]
+    public void Catalog_lists_each_session_and_skips_unsafe_ids()
+    {
+        using var dir = new TempDir();
+        dir.File("187922594.toml", PeerFile.Replace("alias = 'Lounge PC'", ""));
+        dir.File("21060257.toml", "[info]\nusername = 'BilginOzkan'\nhostname = 'bilginwork'\n");
+        dir.File("bad id&calc.toml", "[info]\nhostname = 'evil'\n");
+
+        var peers = Kite.Plugins.Builtin.RustDesk.RustDeskPlugin.ReadPeers(dir.Path);
+        var items = Kite.Plugins.Builtin.RustDesk.RustDeskPlugin.CreateItems(peers, @"C:\Program Files\RustDesk\rustdesk.exe").ToList();
+        Assert.Equal(["bilginwork", "nuci7"], items.Select(i => i.Name).Order());
+        var nuc = items.Single(i => i.Name == "nuci7");
+        Assert.Equal("187922594", nuc.Target);
+        Assert.Equal("RustDesk · mversion@nuci7 · ID 187 922 594", nuc.Description);
+    }
+}

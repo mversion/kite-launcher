@@ -1,6 +1,7 @@
 using Kite.Plugins.Builtin.Calcy;
 using Kite.Plugins.Builtin.Everything;
 using Kite.Plugins.Builtin.Runner;
+using Kite.Plugins.Builtin.RustDesk;
 using Kite.Plugins.Builtin.Weby;
 
 namespace Kite.Plugins.Builtin;
@@ -13,5 +14,6 @@ public static class BuiltinPlugins
         new WebyPlugin(),
         new RunnerPlugin(),
         new EverythingPlugin(),
+        new RustDeskPlugin(),
     ];
 }
