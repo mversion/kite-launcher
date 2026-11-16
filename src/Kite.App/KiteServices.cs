@@ -82,6 +82,27 @@ public sealed class KiteServices : IHostServices, IDisposable
         clear.Start();
     });
 
+    public Task<string?> VerifyUserAsync(string reason) => _dispatcher.InvokeAsync(async () =>
+    {
+        // The prompt needs a window of ours to belong to; the launcher may already be fading out, so use
+        // a tiny transparent one in the middle of the screen, activated while Kite still has the focus.
+        var owner = new Window
+        {
+            WindowStyle = WindowStyle.None, AllowsTransparency = true, Background = System.Windows.Media.Brushes.Transparent,
+            ShowInTaskbar = false, Topmost = true, Width = 1, Height = 1, ResizeMode = ResizeMode.NoResize,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen, ShowActivated = true, Title = "Kite Launcher",
+        };
+        try
+        {
+            owner.Show();
+            owner.Activate();
+            var result = await WindowsHello.VerifyAsync(new System.Windows.Interop.WindowInteropHelper(owner).Handle, reason);
+            if (result != WindowsHello.Result.Verified) Logger.Log($"Windows Hello: {result}");
+            return result == WindowsHello.Result.Verified ? null : WindowsHello.Explain(result) ?? "";
+        }
+        finally { owner.Close(); }
+    }).Task.Unwrap();
+
     public void RequestCatalogRebuild() => _ = Catalog.RebuildAsync();
 
     public void Log(string message) => Logger.Log(message);

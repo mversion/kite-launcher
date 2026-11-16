@@ -427,6 +427,17 @@ public partial class SettingsWindow : Window
             Toggle(evOptions.MatchPath, v => ev["matchPath"] = v, Apply.Plugins));
         Add(s, "Everything: Enter opens the Everything window", "Off: Enter opens the highlighted file. On: Enter opens Everything with your search (like Launchy) and the files are listed below it.",
             "everything enter behaviour window launchy open", Toggle(evOptions.EnterOpensEverything, v => ev["enterOpensEverything"] = v, Apply.Plugins));
+
+        // Ente Auth 2FA codes
+        var ente = PluginSection(Kite.Plugins.Builtin.EnteAuth.EnteAuthPlugin.PluginId);
+        Add(s, "Ente Auth: how it works", "Switch on the Ente Auth plugin above, then type a service (e.g. \"microsoft\") or Tab on Ente Auth (\"ente ⇥ micro\"). The current code shows on the row; Enter copies it, kept out of clipboard history and cleared after 30 seconds. Needs the Ente Auth desktop app signed in on this PC.",
+            "ente auth 2fa two factor totp authenticator codes otp", null);
+        Add(s, "Ente Auth: require Windows Hello", "Codes stay hidden until you confirm it's you with your face, fingerprint or PIN. Without it, anyone at your unlocked PC can see codes in Kite.",
+            "ente auth 2fa windows hello pin fingerprint face lock security verify",
+            Toggle(ente["requireHello"]?.GetValue<bool>() ?? false, v => ente["requireHello"] = v, Apply.Plugins));
+        Add(s, "Ente Auth: stay unlocked for (minutes)", "After Windows Hello confirms it's you, codes show without asking again for this long.",
+            "ente auth windows hello unlock minutes timeout duration",
+            Number(ente["unlockMinutes"]?.GetValue<int>() ?? 5, 1, 240, v => ente["unlockMinutes"] = v, Apply.Plugins));
     }
 
     private TextBox SmallInput(string value, Action<string> set, string hint)

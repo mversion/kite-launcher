@@ -12,6 +12,7 @@ public interface IHostServices
 {
     void CopyToClipboard(string text);
     void CopySecretToClipboard(string text, TimeSpan clearAfter) => CopyToClipboard(text);
+    Task<string?> VerifyUserAsync(string reason) => Task.FromResult<string?>("Windows Hello isn't available here.");
     void RequestCatalogRebuild();
     void Log(string message);
 }
@@ -223,6 +224,7 @@ internal sealed class PluginContext(string pluginId, SettingsStore settings, IHo
     public void OpenUri(string uri) => ShellLauncher.OpenUri(uri);
     public void CopyToClipboard(string text) => host.CopyToClipboard(text);
     public void CopySecretToClipboard(string text, TimeSpan clearAfter) => host.CopySecretToClipboard(text, clearAfter);
+    public Task<string?> VerifyUserAsync(string reason) => host.VerifyUserAsync(reason);
     public void Log(string message) => host.Log($"[{pluginId}] {message}");
     public void RequestCatalogRebuild() => host.RequestCatalogRebuild();
 }

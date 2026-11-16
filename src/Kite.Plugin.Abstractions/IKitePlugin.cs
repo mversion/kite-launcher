@@ -71,6 +71,12 @@ public interface IPluginContext
     /// clipboard, and cleared after <paramref name="clearAfter"/> if it's still on the clipboard.
     /// </summary>
     void CopySecretToClipboard(string text, TimeSpan clearAfter) => CopyToClipboard(text);
+
+    /// <summary>
+    /// Asks the user to confirm it's them with Windows Hello (face, fingerprint or PIN). Completes with
+    /// null when verified, "" when they cancelled, or a message saying why it couldn't be done.
+    /// </summary>
+    Task<string?> VerifyUserAsync(string reason) => Task.FromResult<string?>("Windows Hello isn't available here.");
     void Log(string message);
 
     /// <summary>Ask the host to rebuild the catalog (e.g. after plugin settings changed).</summary>

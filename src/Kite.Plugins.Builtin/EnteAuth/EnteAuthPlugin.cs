@@ -19,9 +19,18 @@ public sealed class EnteAuthPlugin : IKitePlugin
     private IReadOnlyList<OtpAccount> _accounts = [];
     private DateTime _loadedStamp;
     private string? _error;
+    private bool _requireHello;
+    private TimeSpan _unlockFor = TimeSpan.FromMinutes(5);
+    private DateTimeOffset _unlockedUntil = DateTimeOffset.MinValue;
+    private string? _helloProblem;
+    private int _verifying;
 
     public EnteAuthPlugin() : this(() => new EnteAuthStore()) { }
     public EnteAuthPlugin(Func<EnteAuthStore> storeFactory) => _storeFactory = storeFactory;
+
+    /// <summary>For tests: fixed accounts instead of reading Ente Auth.</summary>
+    public EnteAuthPlugin(IReadOnlyList<OtpAccount> accounts) : this(() => new EnteAuthStore()) => _fixedAccounts = accounts;
+    private readonly IReadOnlyList<OtpAccount>? _fixedAccounts;
 
     public string Id => PluginId;
     public string Name => "Ente Auth";
@@ -31,7 +40,17 @@ public sealed class EnteAuthPlugin : IKitePlugin
     /// <summary>For tests: the clock codes are generated for.</summary>
     public Func<DateTimeOffset> Clock { get; set; } = () => DateTimeOffset.UtcNow;
 
-    public void Init(IPluginContext context) => _ctx = context;
+    public void Init(IPluginContext context)
+    {
+        _ctx = context;
+        var wasRequired = _requireHello;
+        _requireHello = context.Settings["requireHello"]?.GetValue<bool>() ?? false;
+        _unlockFor = TimeSpan.FromMinutes(Math.Clamp(context.Settings["unlockMinutes"]?.GetValue<int>() ?? 5, 1, 240));
+        if (_requireHello && !wasRequired) _unlockedUntil = DateTimeOffset.MinValue; // switching the check on locks at once
+    }
+
+    /// <summary>Codes are hidden until Windows Hello confirms it's you (only when that check is on).</summary>
+    public bool IsLocked => _requireHello && Clock() >= _unlockedUntil;
 
     /// <summary>"Ente Auth" from the Start menu works as a Tab owner: "ente ⇥ micro".</summary>
     public bool HandlesOwner(CatItem owner) =>
@@ -61,20 +80,32 @@ public sealed class EnteAuthPlugin : IKitePlugin
                 : Empty;
 
         var now = Clock();
+        var locked = IsLocked;
         var results = new List<CatItem>();
         foreach (var a in accounts)
         {
             if (a.Type == OtpType.Hotp) continue; // counter-based codes need Ente Auth to advance the counter
             var score = ownerMode ? (text.Length == 0 ? 1 : Match(a, text) is var m && m > 0 ? m : 0) : Match(a, text);
             if (score <= 0) continue;
-            var (code, left) = a.CodeAt(now);
+            string detail, hint;
+            if (locked)
+            {
+                detail = "••• •••";
+                hint = _helloProblem ?? "Enter unlocks with Windows Hello";
+            }
+            else
+            {
+                var (code, left) = a.CodeAt(now);
+                detail = $"{OtpAccount.Pretty(code)}  ·  {left}s";
+                hint = "Enter copies the code";
+            }
             results.Add(new CatItem
             {
                 Name = a.Title,
                 Target = a.Id,
                 PluginId = PluginId,
-                Description = a.Issuer.Length > 0 && a.Account.Length > 0 ? $"{a.Account}  ·  Enter copies the code" : "Enter copies the code",
-                Detail = $"{OtpAccount.Pretty(code)}  ·  {left}s",
+                Description = a.Issuer.Length > 0 && a.Account.Length > 0 ? $"{a.Account}  ·  {hint}" : hint,
+                Detail = detail,
                 IconPath = EnteShortcut,
                 // Plain searches: an exact service name goes first; other matches list below apps and files.
                 Score = ownerMode ? 1000 + score : score >= 300 ? 1500 : -50 + score / 10,
@@ -106,14 +137,44 @@ public sealed class EnteAuthPlugin : IKitePlugin
         }
         var account = Accounts().FirstOrDefault(a => a.Id == item.Target);
         if (account is null) return item.Target.Length == 0; // the error row: nothing to do
+        if (IsLocked)
+        {
+            _ = UnlockThenCopyAsync(account);
+            return true;
+        }
         var (code, _) = account.CodeAt(Clock());
         _ctx.CopySecretToClipboard(code, ClipboardLifetime);
         return true;
     }
 
+    /// <summary>Windows Hello first; the code is copied only once it confirms it's you.</summary>
+    private async Task UnlockThenCopyAsync(OtpAccount account)
+    {
+        if (Interlocked.Exchange(ref _verifying, 1) == 1) return; // a prompt is already showing
+        try
+        {
+            var problem = await _ctx.VerifyUserAsync($"Show 2FA codes from Ente Auth ({account.Title})");
+            if (problem is not null)
+            {
+                _helloProblem = problem.Length > 0 ? problem : null; // "" = cancelled: nothing to explain
+                return;
+            }
+            _helloProblem = null;
+            _unlockedUntil = Clock() + _unlockFor;
+            var (code, _) = account.CodeAt(Clock());
+            _ctx.CopySecretToClipboard(code, ClipboardLifetime);
+        }
+        catch (Exception ex)
+        {
+            _ctx.Log($"Ente Auth: Windows Hello failed: {ex.Message}");
+        }
+        finally { Interlocked.Exchange(ref _verifying, 0); }
+    }
+
     /// <summary>The accounts, re-read whenever Ente Auth's database changes.</summary>
     private IReadOnlyList<OtpAccount> Accounts()
     {
+        if (_fixedAccounts is not null) return _fixedAccounts;
         var store = _storeFactory();
         var stamp = File.Exists(store.DatabasePath) ? File.GetLastWriteTimeUtc(store.DatabasePath) : DateTime.MinValue;
         lock (_gate)
