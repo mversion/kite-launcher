@@ -13,8 +13,10 @@ public static class WindowsHello
 
     private static readonly Guid IidUserConsentVerifierInterop = new("39E050C3-4E74-441A-8DC0-B81104DF949C");
     // IAsyncOperation<UserConsentVerificationResult>: the WinRT parameterized-interface IID, derived from
-    // pinterface({9fc2b0bb-e446-4e1a-9ce6-a7ab2aab0ab5};enum(Windows.Security.Credentials.UI.UserConsentVerificationResult;i4)).
-    private static readonly Guid IidAsyncOperationOfResult = new("e5189ae1-5e10-58ce-81da-4ae5660a1f39");
+    // pinterface({9fc2b0bb-e446-44e2-aa61-9cab8f636af2};enum(Windows.Security.Credentials.UI.UserConsentVerificationResult;i4))
+    // (IAsyncOperation`1's GUID as read from Windows.Foundation.winmd; the same derivation gives the
+    // documented cdb5efb3-5788-509d-9be1-71ccb8a3362a for IAsyncOperation<bool>).
+    private static readonly Guid IidAsyncOperationOfResult = new("fd596ffd-2318-558f-9dbe-d21df43764a5");
     private static readonly Guid IidAsyncInfo = new("00000036-0000-0000-C000-000000000046");
 
     /// <summary>Shows the Windows Hello prompt for <paramref name="owner"/>. Call on a thread with COM initialised (the UI thread).</summary>
