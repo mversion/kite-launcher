@@ -106,7 +106,7 @@ public sealed class EnteAuthPlugin : IKitePlugin
                 PluginId = PluginId,
                 Description = a.Issuer.Length > 0 && a.Account.Length > 0 ? $"{a.Account}  ·  {hint}" : hint,
                 Detail = detail,
-                IconPath = EnteShortcut,
+                IconPath = EnteIcon,
                 // Plain searches: an exact service name goes first; other matches list below apps and files.
                 Score = ownerMode ? 1000 + score : score >= 300 ? 1500 : -50 + score / 10,
             });
@@ -187,6 +187,15 @@ public sealed class EnteAuthPlugin : IKitePlugin
             if (result.Error is not null) _ctx.Log($"Ente Auth: {result.Error}");
             else if (result.Skipped > 0) _ctx.Log($"Ente Auth: {result.Skipped} entries couldn't be read");
             return _accounts;
+        }
+    }
+
+    private static string? EnteIcon
+    {
+        get
+        {
+            var exe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Ente Auth", "auth.exe");
+            return File.Exists(exe) ? exe : EnteShortcut;
         }
     }
 

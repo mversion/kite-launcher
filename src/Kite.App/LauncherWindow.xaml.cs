@@ -373,7 +373,7 @@ public partial class LauncherWindow : Window
     }
 
     private List<CatItem> Compose(Query query, List<CatItem> catalog, IReadOnlyList<CatItem> plugin, int max) =>
-        query.Owner is { } owner ? SearchEngine.MergeOwner(owner, query, plugin, _services.History) : SearchEngine.Merge(catalog, plugin, max);
+        query.Owner is { } owner ? SearchEngine.MergeOwner(owner, query, plugin, _services.History) : SearchEngine.Merge(catalog, plugin, max, query.Text, _services.History);
 
     private void Display(IReadOnlyList<CatItem> items)
     {

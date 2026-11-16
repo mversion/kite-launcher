@@ -78,8 +78,10 @@ public sealed class SearchEngine
     /// Final ordering without an owner: positive-score plugin results, then catalog matches, then
     /// the remaining plugin results (fallbacks such as "Search Google for ...").
     /// </summary>
-    public static List<CatItem> Merge(IReadOnlyList<CatItem> catalog, IReadOnlyList<CatItem> plugin, int max)
+    public static List<CatItem> Merge(IReadOnlyList<CatItem> catalog, IReadOnlyList<CatItem> plugin, int max, string? text = null, History? history = null)
     {
+        if (history is not null && text is not null)
+            plugin = ApplyPicks(new CatItem { Name = "", Target = "" }, new Query(text), plugin, history, ownerKey: "");
         var result = new List<CatItem>(catalog.Count + plugin.Count);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var p in plugin.Where(p => p.Score > 0).OrderByDescending(p => p.Score))
@@ -119,23 +121,24 @@ public sealed class SearchEngine
     /// the plugin answers (or if it dropped out of the plugin's results), as long as the file still exists;
     /// for a partial search ("pass" of "password reset") it is lifted only when it's among the results.
     /// </summary>
-    public static IReadOnlyList<CatItem> ApplyPicks(CatItem owner, Query query, IReadOnlyList<CatItem> plugin, History history)
+    public static IReadOnlyList<CatItem> ApplyPicks(CatItem owner, Query query, IReadOnlyList<CatItem> plugin, History history, string? ownerKey = null)
     {
-        var search = History.NormalizeSearch(query.ArgumentText);
+        var key = ownerKey ?? owner.Key;
+        var search = History.NormalizeSearch(ownerKey is null ? query.ArgumentText : query.Text);
         if (search.Length == 0) return plugin;
         var list = plugin.ToList();
 
-        if (history.LookupPick(owner.Key, search) is { } exact)
+        if (history.LookupPick(key, search) is { } exact)
         {
             var i = list.FindIndex(p => string.Equals(p.Key, exact.ItemKey, StringComparison.OrdinalIgnoreCase));
             if (i >= 0) list[i] = list[i] with { Score = PickedScore };
-            else if (!exact.Target.StartsWith(@"\\", StringComparison.Ordinal) && (File.Exists(exact.Target) || Directory.Exists(exact.Target)))
+            else if (Path.IsPathRooted(exact.Target) && !exact.Target.StartsWith(@"\\", StringComparison.Ordinal) && (File.Exists(exact.Target) || Directory.Exists(exact.Target)))
                 list.Add(exact.ToItem() with { Score = PickedScore });
             return list;
         }
 
         if (search.Length < 3) return list;
-        foreach (var pick in history.PicksStartingWith(owner.Key, search))
+        foreach (var pick in history.PicksStartingWith(key, search))
         {
             var i = list.FindIndex(p => string.Equals(p.Key, pick.ItemKey, StringComparison.OrdinalIgnoreCase));
             if (i < 0) continue;

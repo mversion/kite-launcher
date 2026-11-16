@@ -34,8 +34,8 @@ public sealed class LaunchService
                 handled = _plugins.Launch(selected, query, mode);
             if (!handled)
                 ShellLauncher.Launch(isOwnerRow ? owner.Target : selected.Target, isOwnerRow ? query.ArgumentText : null, mode);
-            // A file picked from the owner's results (e.g. "e ⇥ password reset") comes first next time.
-            if (!isOwnerRow && Path.IsPathRooted(selected.Target))
+            // What was picked from the owner's results ("e ⇥ password reset", "ente ⇥ microsoft") comes first next time.
+            if (!isOwnerRow && (selected.PluginId is not null || Path.IsPathRooted(selected.Target)))
                 _history.RecordPick(owner.Key, query.ArgumentText, selected);
             Learn(ownerTypedText ?? "", owner);
             return;
@@ -49,8 +49,18 @@ public sealed class LaunchService
 
         if (selected.PluginId is null || !_plugins.Launch(selected, query, mode))
             ShellLauncher.Launch(selected.Target, null, mode);
+        // A plugin result picked from several (e.g. one of four Microsoft codes) comes first next time
+        // the same thing is typed; catalog items are learned the Launchy way below.
+        if (selected.PluginId is not null && !_isCatalogKey(selected.Key))
+        {
+            _history.RecordPick(NoOwner, query.Text, selected);
+            _historyChanged();
+        }
         Learn(query.Text, selected);
     }
+
+    /// <summary>Owner key used for picks made without a Tab owner.</summary>
+    public const string NoOwner = "";
 
     private void Learn(string typed, CatItem item)
     {

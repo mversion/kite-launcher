@@ -201,3 +201,36 @@ public class OwnerPickTests
         Assert.Equal(b, loaded.LookupPick(Owner.Key, "PASSWORD RESET")?.Target);
     }
 }
+
+public class PluginPickTests
+{
+    private static CatItem Code(string account, int score) =>
+        new() { Name = "Microsoft", Target = "id-" + account, PluginId = "enteauth", Description = account, Score = score };
+
+    private static readonly CatItem[] Codes = [Code("mversion@outlook.com", 1500), Code("mversion@gmail.com", 1500), Code("reports@radioparts.com.au", 1500), Code("bilgin@radioparts.com.au", 1500)];
+    private static readonly CatItem EnteOwner = new() { Name = "Ente Auth", Target = @"C:\Start Menu\Ente Auth.lnk" };
+
+    [Fact]
+    public void Plain_search_puts_the_last_picked_code_first()
+    {
+        var history = new History();
+        history.RecordPick(Kite.Core.Launching.LaunchService.NoOwner, "microsoft", Codes[3]);
+
+        var merged = SearchEngine.Merge([Items.App("Microsoft Edge")], Codes, 10, "Microsoft ", history);
+        Assert.Equal("bilgin@radioparts.com.au", merged[0].Description);
+        var partial = SearchEngine.Merge([], Codes, 10, "micro", history);
+        Assert.Equal("bilgin@radioparts.com.au", partial[0].Description);
+        var unrelated = SearchEngine.Merge([], Codes, 10, "github", history);
+        Assert.Equal("mversion@outlook.com", unrelated[0].Description);
+    }
+
+    [Fact]
+    public void Tab_search_on_Ente_Auth_remembers_too()
+    {
+        var history = new History();
+        history.RecordPick(EnteOwner.Key, "mic", Codes[3]);
+        var merged = SearchEngine.MergeOwner(EnteOwner, new Query("ente\tmic", EnteOwner, ["mic"]), Codes, history);
+        Assert.Equal("bilgin@radioparts.com.au", merged[0].Description);
+        Assert.Equal(4, merged.Count(m => m.PluginId == "enteauth"));          // not duplicated: codes aren't files
+    }
+}
