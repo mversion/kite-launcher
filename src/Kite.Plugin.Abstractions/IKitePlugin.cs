@@ -20,6 +20,9 @@ public interface IKitePlugin
     string Name { get; }
     string Description => "";
 
+    /// <summary>False for plugins the user should switch on deliberately (e.g. ones that show secrets).</summary>
+    bool EnabledByDefault => true;
+
     void Init(IPluginContext context);
 
     /// <summary>Static entries merged into the main catalog (rebuilt on rescan).</summary>
@@ -62,6 +65,12 @@ public interface IPluginContext
     void RunProgram(string file, string? arguments = null, bool runAsAdmin = false);
     void OpenUri(string uri);
     void CopyToClipboard(string text);
+
+    /// <summary>
+    /// Copies a secret (a 2FA code, a password): kept out of Windows clipboard history and cloud
+    /// clipboard, and cleared after <paramref name="clearAfter"/> if it's still on the clipboard.
+    /// </summary>
+    void CopySecretToClipboard(string text, TimeSpan clearAfter) => CopyToClipboard(text);
     void Log(string message);
 
     /// <summary>Ask the host to rebuild the catalog (e.g. after plugin settings changed).</summary>

@@ -1,4 +1,5 @@
 using Kite.Plugins.Builtin.Calcy;
+using Kite.Plugins.Builtin.EnteAuth;
 using Kite.Plugins.Builtin.Everything;
 using Kite.Plugins.Builtin.Runner;
 using Kite.Plugins.Builtin.RustDesk;
@@ -15,5 +16,6 @@ public static class BuiltinPlugins
         new RunnerPlugin(),
         new EverythingPlugin(),
         new RustDeskPlugin(),
+        new EnteAuthPlugin(),
     ];
 }

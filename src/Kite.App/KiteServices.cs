@@ -58,6 +58,30 @@ public sealed class KiteServices : IHostServices, IDisposable
         Logger.Log("Clipboard busy; copy failed");
     });
 
+    public void CopySecretToClipboard(string text, TimeSpan clearAfter) => _dispatcher.Invoke(() =>
+    {
+        // These formats tell Windows not to keep the copy in clipboard history (Win+V) or sync it to
+        // other devices, and clipboard managers that honour the convention to skip it.
+        var data = new DataObject(DataFormats.UnicodeText, text);
+        data.SetData("ExcludeClipboardContentFromMonitorProcessing", new System.IO.MemoryStream([0, 0, 0, 0]));
+        data.SetData("CanIncludeInClipboardHistory", new System.IO.MemoryStream([0, 0, 0, 0]));
+        data.SetData("CanUploadToCloudClipboard", new System.IO.MemoryStream([0, 0, 0, 0]));
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try { Clipboard.SetDataObject(data, copy: true); break; }
+            catch (System.Runtime.InteropServices.COMException) { Thread.Sleep(40); }
+        }
+
+        var clear = new DispatcherTimer { Interval = clearAfter };
+        clear.Tick += (_, _) =>
+        {
+            clear.Stop();
+            try { if (Clipboard.ContainsText() && Clipboard.GetText() == text) Clipboard.Clear(); }
+            catch (System.Runtime.InteropServices.COMException) { /* busy: leave it */ }
+        };
+        clear.Start();
+    });
+
     public void RequestCatalogRebuild() => _ = Catalog.RebuildAsync();
 
     public void Log(string message) => Logger.Log(message);

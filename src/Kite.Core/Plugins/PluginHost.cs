@@ -11,6 +11,7 @@ namespace Kite.Core.Plugins;
 public interface IHostServices
 {
     void CopyToClipboard(string text);
+    void CopySecretToClipboard(string text, TimeSpan clearAfter) => CopyToClipboard(text);
     void RequestCatalogRebuild();
     void Log(string message);
 }
@@ -72,6 +73,18 @@ public sealed class PluginHost
 
     public void InitAll()
     {
+        // First sight of a plugin: one that's off by default goes into the disabled list once, so the
+        // Settings switch works as usual afterwards.
+        var cfg = _settings.Current;
+        var changed = false;
+        foreach (var p in _plugins)
+        {
+            if (!cfg.KnownPlugins.Add(p.Id)) continue;
+            changed = true;
+            if (!p.EnabledByDefault) cfg.DisabledPlugins.Add(p.Id);
+        }
+        if (changed) _settings.Save();
+
         foreach (var p in _plugins)
         {
             try { p.Init(new PluginContext(p.Id, _settings, _host)); }
@@ -209,6 +222,7 @@ internal sealed class PluginContext(string pluginId, SettingsStore settings, IHo
 
     public void OpenUri(string uri) => ShellLauncher.OpenUri(uri);
     public void CopyToClipboard(string text) => host.CopyToClipboard(text);
+    public void CopySecretToClipboard(string text, TimeSpan clearAfter) => host.CopySecretToClipboard(text, clearAfter);
     public void Log(string message) => host.Log($"[{pluginId}] {message}");
     public void RequestCatalogRebuild() => host.RequestCatalogRebuild();
 }

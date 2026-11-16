@@ -15,6 +15,8 @@ public sealed class AppSettings
 
     /// <summary>Plugin ids that are switched off.</summary>
     public HashSet<string> DisabledPlugins { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Plugins Kite has seen; a new one that's off by default is disabled once, on first sight.</summary>
+    public HashSet<string> KnownPlugins { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public static List<CatalogDirectory> DefaultDirectories() =>
     [
